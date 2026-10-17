@@ -1,6 +1,7 @@
 import random
 
 from kivy.animation import Animation
+from kivy.clock import Clock
 from kivy.graphics import Color, RoundedRectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
@@ -19,6 +20,7 @@ from common import (
     MessageLabel,
     Page,
     RoundButton,
+    Sfx,
     TopBar,
     flash_glow,
     float_text,
@@ -37,6 +39,12 @@ SIMPLE_BETS = [
     ("odd", "Нечётное"),
     ("low", "1-18"),
     ("high", "19-36"),
+]
+
+DOZEN_BETS = [
+    ("dozen1", "1-12"),
+    ("dozen2", "13-24"),
+    ("dozen3", "25-36"),
 ]
 
 
@@ -67,6 +75,12 @@ def is_winning(kind, pick, result):
         return result <= 18
     if kind == "high":
         return result >= 19
+    if kind == "dozen1":
+        return 1 <= result <= 12
+    if kind == "dozen2":
+        return 13 <= result <= 24
+    if kind == "dozen3":
+        return 25 <= result <= 36
     return False
 
 
@@ -74,6 +88,8 @@ def payout_multiplier(kind):
     """Total return per 1 chip bet (stake included)."""
     if kind == "number":
         return 36
+    if kind in ("dozen1", "dozen2", "dozen3"):
+        return 3
     return 2
 
 
@@ -108,6 +124,8 @@ class RouletteScreen(Screen):
         self.history = []
         self.kind_texts = {}
 
+        self.tick_sound_event = None
+
         root = Page(padding=16, spacing=8)
 
         self.top_bar = TopBar(self.go_menu)
@@ -127,22 +145,32 @@ class RouletteScreen(Screen):
         self.history_row = BoxLayout(spacing=4, size_hint_y=0.06)
         root.add_widget(self.history_row)
 
-        grid = GridLayout(cols=2, spacing=8, size_hint_y=0.3)
+        grid = GridLayout(cols=2, spacing=6, size_hint_y=0.22)
         self.kind_buttons = {}
         for kind, text in SIMPLE_BETS:
             button = RoundButton(text=text, btn_color=self.base_color(kind))
-            button.font_size = 20
+            button.font_size = 18
             button.bind(on_release=self.make_kind_handler(kind))
             self.kind_buttons[kind] = button
             self.kind_texts[kind] = text
             grid.add_widget(button)
         root.add_widget(grid)
 
-        number_row = BoxLayout(spacing=8, size_hint_y=0.09)
+        dozen_row = BoxLayout(spacing=6, size_hint_y=0.07)
+        for kind, text in DOZEN_BETS:
+            button = RoundButton(text=text, btn_color=GRAY)
+            button.font_size = 18
+            button.bind(on_release=self.make_kind_handler(kind))
+            self.kind_buttons[kind] = button
+            self.kind_texts[kind] = text
+            dozen_row.add_widget(button)
+        root.add_widget(dozen_row)
+
+        number_row = BoxLayout(spacing=8, size_hint_y=0.08)
         minus_button = RoundButton(text="-", btn_color=GRAY, size_hint_x=0.25)
         minus_button.bind(on_release=self.pick_minus)
         self.number_button = RoundButton(btn_color=GRAY, size_hint_x=0.5)
-        self.number_button.font_size = 20
+        self.number_button.font_size = 19
         self.number_button.bind(on_release=self.select_number_bet)
         plus_button = RoundButton(text="+", btn_color=GRAY, size_hint_x=0.25)
         plus_button.bind(on_release=self.pick_plus)
@@ -151,7 +179,7 @@ class RouletteScreen(Screen):
         number_row.add_widget(plus_button)
         root.add_widget(number_row)
 
-        controls = BoxLayout(spacing=8, size_hint_y=0.13)
+        controls = BoxLayout(spacing=8, size_hint_y=0.12)
         self.bet_button = RoundButton(btn_color=GRAY)
         self.bet_button.font_size = 20
         self.bet_button.bind(on_release=self.change_bet)
@@ -199,6 +227,7 @@ class RouletteScreen(Screen):
             return
         self.kind = kind
         self.update_labels()
+        Sfx.play("chip")
 
     def select_number_bet(self, *args):
         self.select_kind("number")
@@ -211,6 +240,7 @@ class RouletteScreen(Screen):
             self.pick = 36
         self.kind = "number"
         self.update_labels()
+        Sfx.play("click")
 
     def pick_plus(self, *args):
         if self.spinning:
@@ -220,6 +250,7 @@ class RouletteScreen(Screen):
             self.pick = 0
         self.kind = "number"
         self.update_labels()
+        Sfx.play("click")
 
     def change_bet(self, *args):
         if self.spinning:
@@ -228,6 +259,7 @@ class RouletteScreen(Screen):
         if self.bet_index >= len(BETS):
             self.bet_index = 0
         self.update_labels()
+        Sfx.play("chip")
 
     def update_labels(self):
         self.top_bar.set_balance(self.wallet.balance)
@@ -261,6 +293,9 @@ class RouletteScreen(Screen):
 
     # ----- game logic -----
 
+    def play_wheel_tick(self, dt):
+        Sfx.play("click", volume=0.5)
+
     def spin(self, *args):
         if self.spinning:
             return
@@ -268,6 +303,7 @@ class RouletteScreen(Screen):
         if not self.wallet.can_pay(bet):
             self.message_label.color = SOFT_RED
             self.message_label.text = "Не хватает фишек, уменьши ставку"
+            Sfx.play("lose")
             return
 
         self.wallet.take(bet)
@@ -279,23 +315,35 @@ class RouletteScreen(Screen):
         self.message_label.color = WHITE
         self.message_label.text = "Крутим..."
         self.update_labels()
+
+        Sfx.play("spin")
+        self.tick_sound_event = Clock.schedule_interval(self.play_wheel_tick, 0.4)
         self.wheel.spin_to(self.result, self.finish_spin)
 
     def finish_spin(self):
+        if self.tick_sound_event is not None:
+            self.tick_sound_event.cancel()
+            self.tick_sound_event = None
+
         bet = self.current_bet()
         description = str(self.result) + ", " + color_name(self.result)
         self.wheel.pop()
+        Sfx.play("stop")
 
         if is_winning(self.kind, self.pick, self.result):
             payout = bet * payout_multiplier(self.kind)
             self.wallet.add(payout)
+            self.wallet.record_game(payout - bet, bet)
             self.message_label.color = GOLD
             self.message_label.text = description + ". Выигрыш: " + str(payout) + "!"
             pulse(self.message_label)
             float_text(self, "+" + str(payout), GOLD, 0.55)
             flash_glow(self.wheel, 0.9)
+            Sfx.play("win")
         else:
+            self.wallet.record_game(-bet, bet)
             self.message_label.text = description + ". Не повезло"
+            Sfx.play("lose")
 
         self.history.insert(0, self.result)
         if len(self.history) > HISTORY_SIZE:

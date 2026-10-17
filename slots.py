@@ -13,15 +13,18 @@ from kivy.uix.screenmanager import Screen
 
 from common import (
     BETS,
+    BLUE,
     GOLD,
     GRAY,
     GREEN,
+    RED,
     SOFT_RED,
     WHITE,
     GLabel,
     MessageLabel,
     Page,
     RoundButton,
+    Sfx,
     TopBar,
     flash_glow,
     float_text,
@@ -141,6 +144,9 @@ class SlotsScreen(Screen):
         self.pool = build_pool()
         self.bet_index = 0
         self.spinning = False
+        self.autospin = False
+        self.free_spins = 0
+        self.free_spins_bet = 0
         self.stopped = [True, True, True]
         self.result = []
         self.tick_event = None
@@ -168,14 +174,19 @@ class SlotsScreen(Screen):
 
         root.add_widget(self.build_paytable())
 
-        self.bet_button = RoundButton(btn_color=GRAY, size_hint_y=0.1)
+        btn_row = BoxLayout(spacing=8, size_hint_y=0.09)
+        self.bet_button = RoundButton(btn_color=GRAY)
         self.bet_button.bind(on_release=self.change_bet)
-        root.add_widget(self.bet_button)
+        self.autospin_button = RoundButton(text="АВТО: ВЫКЛ", btn_color=BLUE)
+        self.autospin_button.bind(on_release=self.toggle_autospin)
+        btn_row.add_widget(self.bet_button)
+        btn_row.add_widget(self.autospin_button)
+        root.add_widget(btn_row)
 
         self.spin_button = RoundButton(
-            text="КРУТИТЬ", btn_color=GREEN, size_hint_y=0.15
+            text="КРУТИТЬ", btn_color=GREEN, size_hint_y=0.14
         )
-        self.spin_button.font_size = 30
+        self.spin_button.font_size = 28
         self.spin_button.bind(on_release=self.spin)
         root.add_widget(self.spin_button)
 
@@ -194,7 +205,7 @@ class SlotsScreen(Screen):
 
     def on_pre_enter(self, *args):
         self.message_label.color = WHITE
-        self.message_label.text = "Две одинаковые слева = x2"
+        self.message_label.text = "Две одинаковые = x2 | Три = xN + 5 ФРИСПИНОВ!"
         for i in range(3):
             self.reels[i].set_symbol(SYMBOLS[i])
         self.update_labels()
@@ -202,6 +213,7 @@ class SlotsScreen(Screen):
     def go_menu(self, *args):
         if self.spinning:
             return
+        self.autospin = False
         go_to(self.manager, "menu", "right")
 
     def current_bet(self):
@@ -210,25 +222,55 @@ class SlotsScreen(Screen):
     def update_labels(self):
         self.top_bar.set_balance(self.wallet.balance)
         self.bet_button.text = "Ставка: " + str(self.current_bet())
+        if self.free_spins > 0:
+            self.spin_button.text = f"ФРИСПИН x2 ({self.free_spins})"
+            self.spin_button.btn_color = GOLD
+        else:
+            self.spin_button.text = "КРУТИТЬ"
+            self.spin_button.btn_color = GREEN
 
     def change_bet(self, *args):
-        if self.spinning:
+        if self.spinning or self.free_spins > 0:
             return
         self.bet_index = self.bet_index + 1
         if self.bet_index >= len(BETS):
             self.bet_index = 0
         self.update_labels()
+        Sfx.play("chip")
+
+    def toggle_autospin(self, *args):
+        self.autospin = not self.autospin
+        if self.autospin:
+            self.autospin_button.text = "АВТО: ВКЛ"
+            self.autospin_button.btn_color = RED
+            Sfx.play("click")
+            if not self.spinning:
+                self.spin()
+        else:
+            self.autospin_button.text = "АВТО: ВЫКЛ"
+            self.autospin_button.btn_color = BLUE
+            Sfx.play("click")
 
     def spin(self, *args):
         if self.spinning:
             return
-        bet = self.current_bet()
-        if not self.wallet.can_pay(bet):
-            self.message_label.color = SOFT_RED
-            self.message_label.text = "Не хватает фишек, уменьши ставку"
-            return
 
-        self.wallet.take(bet)
+        is_free = self.free_spins > 0
+        if is_free:
+            self.free_spins -= 1
+            bet = self.free_spins_bet
+        else:
+            bet = self.current_bet()
+            if not self.wallet.can_pay(bet):
+                self.autospin = False
+                self.autospin_button.text = "АВТО: ВЫКЛ"
+                self.autospin_button.btn_color = BLUE
+                self.message_label.color = SOFT_RED
+                self.message_label.text = "Не хватает фишек, уменьши ставку"
+                Sfx.play("lose")
+                return
+            self.wallet.take(bet)
+
         self.spinning = True
         self.spin_button.disabled = True
         self.stopped = [False, False, False]
@@ -238,9 +280,13 @@ class SlotsScreen(Screen):
             self.reels[i].start_spin()
 
         self.message_label.color = WHITE
-        self.message_label.text = "Крутим..."
+        if is_free:
+            self.message_label.text = f"Фриспин! Осталось: {self.free_spins}"
+        else:
+            self.message_label.text = "Крутим..."
         self.update_labels()
 
+        Sfx.play("spin")
         self.tick_event = Clock.schedule_interval(self.tick, 0.07)
         for i in range(3):
             Clock.schedule_once(partial(self.stop_reel, i), STOP_DELAYS[i])
@@ -254,6 +300,7 @@ class SlotsScreen(Screen):
     def stop_reel(self, index, dt):
         self.stopped[index] = True
         self.reels[index].stop_spin(self.result[index])
+        Sfx.play("stop")
         if index == 2:
             self.finish_spin()
 
@@ -262,17 +309,36 @@ class SlotsScreen(Screen):
             self.tick_event.cancel()
             self.tick_event = None
 
-        win = calc_win(self.result, self.current_bet())
+        is_free = self.free_spins >= 0 and self.free_spins_bet > 0
+        bet = self.free_spins_bet if (is_free and self.free_spins > 0) else self.current_bet()
+
+        win = calc_win(self.result, bet)
+        if self.free_spins > 0 or (is_free and win > 0):
+            win *= 2
+
+        three_match = len(winning_reels(self.result)) == 3
         if win > 0:
             self.wallet.add(win)
+            self.wallet.record_game(win if is_free else (win - bet), 0 if is_free else bet)
             self.message_label.color = GOLD
             self.message_label.text = "Выигрыш: " + str(win) + "!"
             pulse(self.message_label)
             float_text(self, "+" + str(win), GOLD, 0.45)
             for index in winning_reels(self.result):
                 flash_glow(self.reels[index], 0.9)
+            Sfx.play("win")
         else:
+            if not is_free:
+                self.wallet.record_game(-bet, bet)
             self.message_label.text = "Не повезло, попробуй ещё"
+            Sfx.play("lose")
+
+        if three_match:
+            self.free_spins += 5
+            self.free_spins_bet = bet
+            self.message_label.text += "\nБОНУС: +5 ФРИСПИНОВ (x2)!"
+            pulse(self.message_label)
+            Sfx.play("bonus")
 
         if self.wallet.refill_if_broke():
             self.message_label.color = WHITE
@@ -281,3 +347,11 @@ class SlotsScreen(Screen):
         self.spinning = False
         self.spin_button.disabled = False
         self.update_labels()
+
+        if self.autospin:
+            if self.free_spins > 0 or self.wallet.can_pay(self.current_bet()):
+                Clock.schedule_once(self.spin, 1.1)
+            else:
+                self.autospin = False
+                self.autospin_button.text = "АВТО: ВЫКЛ"
+                self.autospin_button.btn_color = BLUE

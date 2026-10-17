@@ -687,6 +687,13 @@ class BlackjackScreen(Screen):
         self.hit_button.bind(on_release=self.hit)
         self.stand_button = RoundButton(text="ХВАТИТ", btn_color=RED)
         self.stand_button.bind(on_release=self.stand)
+        self.double_button = RoundButton(text="УДВОИТЬ", btn_color=GOLD)
+        self.double_button.bind(on_release=self.double_down)
+        self.double_down_button = self.double_button
+        self.surrender_button = RoundButton(text="ПАС", btn_color=GRAY)
+        self.surrender_button.bind(on_release=self.surrender)
+        self.split_button = RoundButton(text="СПЛИТ", btn_color=GOLD)
+        self.split_button.bind(on_release=self.split_hand)
 
         self.add_widget(root)
 
@@ -944,6 +951,11 @@ class BlackjackScreen(Screen):
         self.deal_button.disabled = flag
         self.hit_button.disabled = flag
         self.stand_button.disabled = flag
+        self.double_button.disabled = flag or (len(self.player) != 2)
+        if hasattr(self, "surrender_button"):
+            self.surrender_button.disabled = flag or (len(self.player) != 2)
+        if hasattr(self, "split_button"):
+            self.split_button.disabled = flag or (len(self.player) != 2)
 
     def show_bet_chips(self, animate=True):
         count = min(self.bet_index + 1, 5)
@@ -964,9 +976,25 @@ class BlackjackScreen(Screen):
         self.stop_breathing()
         self.controls.clear_widgets()
         self.controls.add_widget(self.hit_button)
+        self.controls.add_widget(self.double_button)
+        can_split = (
+            len(self.player) == 2
+            and self.player[0][0] == self.player[1][0]
+            and self.wallet.can_pay(self.bet)
+        )
+        if can_split:
+            self.controls.add_widget(self.split_button)
+            self.fade_in_button(self.split_button, 0.04)
+
+        if len(self.player) == 2:
+            self.controls.add_widget(self.surrender_button)
+            self.fade_in_button(self.surrender_button, 0.06)
+
         self.controls.add_widget(self.stand_button)
+        self.double_button.disabled = len(self.player) != 2
         self.top_bar.set_balance(self.wallet.balance)
         self.fade_in_button(self.hit_button, 0.0)
+        self.fade_in_button(self.double_button, 0.02)
         self.fade_in_button(self.stand_button, 0.08)
 
     def change_bet(self, *args):
@@ -1154,7 +1182,58 @@ class BlackjackScreen(Screen):
         if hand_value(self.player) == 21:
             self.reveal_dealer(self.natural_result)
             return
+        if len(self.dealer) > 0 and self.dealer[0][0] == "A" and self.wallet.can_pay(self.bet // 2):
+            self.show_insurance_prompt()
+            return
         self.set_message("Твой ход")
+        self.show_play_controls()
+        self.set_busy(False)
+
+    def show_insurance_prompt(self):
+        ins_cost = max(1, self.bet // 2)
+        self.set_message("У дилера Туз! Взять страховку?")
+        self.controls.clear_widgets()
+        ins_btn = RoundButton(text=f"ДА ({ins_cost})", btn_color=GOLD)
+        ins_btn.bind(on_release=self.take_insurance)
+        no_btn = RoundButton(text="НЕТ", btn_color=GRAY)
+        no_btn.bind(on_release=self.decline_insurance)
+        self.controls.add_widget(ins_btn)
+        self.controls.add_widget(no_btn)
+        self.fade_in_button(ins_btn, 0.0)
+        self.fade_in_button(no_btn, 0.05)
+        self.set_busy(False)
+
+    def take_insurance(self, *args):
+        if self.busy or not self.in_round:
+            return
+        cost = max(1, self.bet // 2)
+        self.insurance_taken = True
+        self.insurance_amount = cost
+        self.wallet.take(cost)
+        self.top_bar.set_balance(self.wallet.balance)
+        Sfx.play("chip")
+        self.proceed_after_insurance()
+
+    def decline_insurance(self, *args):
+        if self.busy or not self.in_round:
+            return
+        self.insurance_taken = False
+        self.insurance_amount = 0
+        Sfx.play("click")
+        self.proceed_after_insurance()
+
+    def proceed_after_insurance(self):
+        if hand_value(self.dealer) == 21:
+            if getattr(self, "insurance_taken", False):
+                payout = self.insurance_amount * 3
+                self.wallet.add(payout)
+                self.set_message("Страховка сыграла! (2 к 1)", GOLD)
+            self.reveal_dealer(self.natural_result)
+            return
+        if getattr(self, "insurance_taken", False):
+            self.set_message("Дилер без блэкджека. Твой ход")
+        else:
+            self.set_message("Твой ход")
         self.show_play_controls()
         self.set_busy(False)
 
@@ -1182,6 +1261,69 @@ class BlackjackScreen(Screen):
 
     def bust_result(self):
         self.finish_round("bust", "Перебор")
+
+    def double_down(self, *args):
+        if self.busy or not self.in_round or len(self.player) != 2:
+            return
+        if not self.wallet.can_pay(self.bet):
+            self.set_message("Не хватает фишек для удвоения", SOFT_RED)
+            self.shake(6)
+            return
+
+        extra = self.bet
+        self.wallet.take(extra)
+        self.bet = self.bet + extra
+        self.top_bar.set_balance(self.wallet.balance)
+
+        count = min(max(self.bet_stack.count * 2, 2), 10)
+        self.bet_stack.set_bet(self.bet, count, self.bet_stack.source, True)
+        Sfx.play("chip")
+        self.fly_chip(
+            self.bet_stack.source,
+            self.balance_target(),
+            self.bet_stack.chip_center(),
+            0.0,
+            24,
+        )
+
+        self.set_busy(True)
+        if not self.deck:
+            self.deck = new_deck()
+        self.player.append(self.deck.pop())
+        self.sync_cards(self.after_double)
+
+    def double(self, *args):
+        return self.double_down(*args)
+
+    def after_double(self):
+        value = hand_value(self.player)
+        if value > 21:
+            self.reveal_dealer(self.bust_result)
+        else:
+            self.start_dealer()
+
+    def surrender(self, *args):
+        if self.busy or not self.in_round or len(self.player) != 2:
+            return
+        self.finish_round("surrender", "Сдался (возврат 50%)")
+
+    def split_hand(self, *args):
+        if self.busy or not self.in_round or len(self.player) != 2:
+            return
+        if self.player[0][0] != self.player[1][0] or not self.wallet.can_pay(self.bet):
+            return
+        self.wallet.take(self.bet)
+        self.bet = self.bet * 2
+        self.top_bar.set_balance(self.wallet.balance)
+        Sfx.play("chip")
+        self.player.append(self.deck.pop())
+        self.player.append(self.deck.pop())
+        self.set_message("Сплит! Ставка удвоена, карты добавлены", GOLD)
+        self.sync_cards(self.after_split)
+
+    def after_split(self):
+        self.show_play_controls()
+        self.set_busy(False)
 
     def stand(self, *args):
         if self.busy or not self.in_round:
@@ -1222,11 +1364,14 @@ class BlackjackScreen(Screen):
             payout = bet * 2
         elif outcome == "push":
             payout = bet
+        elif outcome == "surrender":
+            payout = bet // 2
 
         if payout > 0:
             self.wallet.add(payout)
 
         net = payout - bet
+        self.wallet.record_game(net, bet)
         color = WHITE
         if net > 0:
             text = text + ": +" + str(net)
@@ -1298,13 +1443,16 @@ class BlackjackScreen(Screen):
                 self.burst(center[0], center[1], 12)
                 self.coin_rain(16)
             self.flash((1, 0.85, 0.3), 0.16)
-        elif outcome == "push":
+        elif outcome == "push" or outcome == "surrender":
             hold = 1.0
             Sfx.play("push")
             for i in range(count):
                 self.fly_chip(source, stack_pos, balance_pos, 0.15 + i * 0.08)
             self.clear_stack()
-            float_text(self, "Ничья", WHITE, 0.45, 36)
+            if outcome == "surrender":
+                float_text(self, "Возврат: " + str(bet // 2), WHITE, 0.45, 28)
+            else:
+                float_text(self, "Ничья", WHITE, 0.45, 36)
         else:
             hold = 0.9
             Sfx.play("lose")

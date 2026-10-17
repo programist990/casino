@@ -1,7 +1,9 @@
 import json
 import os
+import time
 
 from kivy.animation import Animation
+from kivy.core.audio import SoundLoader
 from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.graphics.texture import Texture
 from kivy.properties import NumericProperty
@@ -37,30 +39,86 @@ def symbol_path(name):
     return os.path.join(BASE_DIR, "assets", "symbols", name + ".png")
 
 
-# ----- wallet -----
+SOUND_DIR = os.path.join(BASE_DIR, "assets", "sounds")
+
+
+class Sfx:
+    """Tiny sound player shared across all casino games."""
+
+    enabled = True
+    cache = {}
+
+    @classmethod
+    def play(cls, name, volume=1.0):
+        if not cls.enabled:
+            return
+        try:
+            if name not in cls.cache:
+                path = os.path.join(SOUND_DIR, name + ".wav")
+                if os.path.exists(path):
+                    cls.cache[name] = SoundLoader.load(path)
+                else:
+                    cls.cache[name] = None
+            sound = cls.cache[name]
+            if sound is not None:
+                sound.volume = volume
+                sound.stop()
+                sound.play()
+        except Exception:
+            cls.cache[name] = None
+
+
+# ----- wallet & stats -----
 
 
 class Wallet:
-    """Chips balance shared between all games."""
+    """Chips balance, stats, and daily bonus shared between all games."""
+
+    DAILY_COOLDOWN = 60 * 60 * 12  # 12 hours bonus cooldown
+    DAILY_BONUS_AMOUNT = 500
 
     def __init__(self, path):
         self.path = path
-        self.balance = self.load()
+        self.balance = START_BALANCE
+        self.last_daily = 0
+        self.stats = {
+            "games_played": 0,
+            "wins": 0,
+            "losses": 0,
+            "biggest_win": 0,
+            "total_won": 0,
+            "total_lost": 0,
+        }
+        self.load()
 
     def load(self):
         if not os.path.exists(self.path):
-            return START_BALANCE
+            self.balance = START_BALANCE
+            return
         try:
             with open(self.path, "r", encoding="utf-8") as file:
                 data = json.load(file)
-            return int(data["balance"])
+            self.balance = int(data.get("balance", START_BALANCE))
+            self.last_daily = float(data.get("last_daily", 0))
+            loaded_stats = data.get("stats", {})
+            for key in self.stats:
+                if key in loaded_stats:
+                    self.stats[key] = int(loaded_stats[key])
         except (ValueError, KeyError, OSError):
-            return START_BALANCE
+            self.balance = START_BALANCE
 
     def save(self):
         try:
             with open(self.path, "w", encoding="utf-8") as file:
-                json.dump({"balance": self.balance}, file)
+                json.dump(
+                    {
+                        "balance": self.balance,
+                        "last_daily": self.last_daily,
+                        "stats": self.stats,
+                    },
+                    file,
+                    indent=2,
+                )
         except OSError:
             pass
 
@@ -68,12 +126,38 @@ class Wallet:
         return self.balance >= amount
 
     def take(self, amount):
-        self.balance = self.balance - amount
+        self.balance = max(0, self.balance - amount)
         self.save()
 
     def add(self, amount):
         self.balance = self.balance + amount
         self.save()
+
+    def record_game(self, net_win, bet):
+        self.stats["games_played"] += 1
+        if net_win > 0:
+            self.stats["wins"] += 1
+            if net_win > self.stats["biggest_win"]:
+                self.stats["biggest_win"] = net_win
+            self.stats["total_won"] += net_win
+        elif net_win < 0:
+            self.stats["losses"] += 1
+            self.stats["total_lost"] += abs(net_win)
+        self.save()
+
+    def can_claim_daily(self):
+        return (time.time() - self.last_daily) >= self.DAILY_COOLDOWN
+
+    def seconds_until_daily(self):
+        left = self.DAILY_COOLDOWN - (time.time() - self.last_daily)
+        return max(0, int(left))
+
+    def claim_daily(self):
+        if not self.can_claim_daily():
+            return False
+        self.last_daily = time.time()
+        self.add(self.DAILY_BONUS_AMOUNT)
+        return True
 
     def refill_if_broke(self):
         """Gives new chips when the player can't afford the smallest bet."""
