@@ -1,0 +1,2 @@
+*.sh text eol=lf
+buildozer.spec text eol=lf

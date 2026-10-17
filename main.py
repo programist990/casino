@@ -277,6 +277,7 @@ class CasinoApp(App):
         os.makedirs(self.user_data_dir, exist_ok=True)
         wallet = Wallet(os.path.join(self.user_data_dir, "save.json"))
 
+        self.wallet = wallet
         manager = ScreenManager(transition=SlideTransition(duration=0.25))
         manager.add_widget(MenuScreen(wallet, name="menu"))
         manager.add_widget(SlotsScreen(wallet, name="slots"))
@@ -284,7 +285,24 @@ class CasinoApp(App):
         manager.add_widget(RouletteScreen(wallet, name="roulette"))
         manager.add_widget(CrashScreen(wallet, name="crash"))
         manager.add_widget(StatsScreen(wallet, name="stats"))
+        self.manager = manager
+        Window.bind(on_keyboard=self.on_key)
         return manager
+
+    def on_key(self, window, key, *args):
+        """Android back button: go to the menu first, exit only from the menu."""
+        if key == 27 and self.manager.current != "menu":
+            go_to(self.manager, "menu", "right")
+            return True
+        return False
+
+    def on_pause(self):
+        # Android: without this the app is killed when the user switches away
+        self.wallet.save()
+        return True
+
+    def on_resume(self):
+        pass
 
 
 if __name__ == "__main__":
