@@ -6,6 +6,7 @@ from functools import partial
 from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.core.audio import SoundLoader
+from kivy.metrics import dp
 from kivy.graphics import (
     Color,
     Ellipse,
@@ -50,9 +51,9 @@ from common import (
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 SUITS = ["S", "H", "D", "C"]  # spades, hearts, diamonds, clubs
 SUIT_SYMBOLS = {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
-CARD_W = 104
-CARD_H = 152
-CARD_GAP = 8
+CARD_W = dp(118)
+CARD_H = dp(172)
+CARD_GAP = dp(8)
 FLIGHT = 0.3  # how long a card flies from the shoe to the table
 CARD_DELAY = 0.4  # pause between dealt cards
 RED_CARD = (0.85, 0.1, 0.1, 1)
@@ -187,7 +188,7 @@ class CardView(BoxLayout):
     angle = NumericProperty(0)
 
     def __init__(self, card, hidden, **kwargs):
-        super().__init__(orientation="vertical", padding=(0, 6), **kwargs)
+        super().__init__(orientation="vertical", padding=(dp(0), dp(6)), **kwargs)
         self.card = card
         self.hidden = hidden
         self.landed = False
@@ -213,8 +214,8 @@ class CardView(BoxLayout):
         with self.canvas.after:
             PopMatrix()
 
-        self.rank_label = Label(font_name=FONT_TITLE, font_size=36)
-        self.suit_label = Label(font_name=FONT_SUITS, font_size=48)
+        self.rank_label = Label(font_name=FONT_TITLE, font_size=dp(42))
+        self.suit_label = Label(font_name=FONT_SUITS, font_size=dp(54))
         self.add_widget(self.rank_label)
         self.add_widget(self.suit_label)
 
@@ -268,9 +269,9 @@ class CardView(BoxLayout):
             self.suit_label.text = SUIT_SYMBOLS[suit]
             self.suit_label.color = color
             if rank == "A":
-                self.suit_label.font_size = 62
+                self.suit_label.font_size = dp(70)
             else:
-                self.suit_label.font_size = 48
+                self.suit_label.font_size = dp(54)
             if rank == "J" or rank == "Q" or rank == "K":
                 self.frame_target = 0.9
             else:
@@ -324,7 +325,7 @@ class Shoe(Widget):
     nudge = NumericProperty(0)
 
     def __init__(self, **kwargs):
-        super().__init__(size_hint=(None, None), size=(52, 74), **kwargs)
+        super().__init__(size_hint=(None, None), size=(dp(58), dp(84)), **kwargs)
         self.bind(pos=self.redraw, size=self.redraw, nudge=self.redraw)
         self.redraw()
 
@@ -384,7 +385,7 @@ class TableBackground(FloatLayout):
             label = Label(
                 text=suit,
                 font_name=FONT_SUITS,
-                font_size=random.randint(26, 62),
+                font_size=dp(random.randint(26, 62)),
                 color=color,
                 size_hint=(None, None),
             )
@@ -399,7 +400,7 @@ class TableBackground(FloatLayout):
             spark = Label(
                 text="✦",
                 font_name=FONT_SUITS,
-                font_size=random.randint(12, 22),
+                font_size=dp(random.randint(12, 22)),
                 color=(1, 0.85, 0.4, 0.9),
                 size_hint=(None, None),
                 opacity=0,
@@ -421,7 +422,7 @@ class TableBackground(FloatLayout):
     def make_caption(self, text):
         label = GLabel(
             text=text,
-            font_size=13,
+            font_size=dp(13),
             color=(1, 0.82, 0.25, 0.34),
             size_hint=(None, None),
         )
@@ -543,7 +544,7 @@ class BetStack(Widget):
         self.source = CHIP_IMAGE
         self.label = GLabel(
             text="",
-            font_size=18,
+            font_size=dp(18),
             color=GOLD,
             size_hint=(None, None),
             size=(70, 26),
@@ -597,9 +598,9 @@ class SoundToggle(Label):
         super().__init__(
             text="♪",
             font_name=FONT_SUITS,
-            font_size=28,
+            font_size=dp(28),
             size_hint=(None, None),
-            size=(44, 44),
+            size=(dp(50), dp(50)),
             **kwargs
         )
         self.refresh()
@@ -652,18 +653,18 @@ class BlackjackScreen(Screen):
         self.table_bg = TableBackground()
         self.add_widget(self.table_bg)
 
-        root = TableLayout(padding=16, spacing=8)
+        root = TableLayout(padding=dp(16), spacing=dp(8))
         self.root_layout = root
 
         self.top_bar = TopBar(self.go_menu)
         root.add_widget(self.top_bar)
 
         self.title_label = GLabel(
-            text="BLACKJACK", font_size=36, color=GOLD, size_hint_y=0.07
+            text="BLACKJACK", font_size=dp(36), color=GOLD, size_hint_y=0.07
         )
         root.add_widget(self.title_label)
 
-        self.dealer_label = GLabel(font_size=24, size_hint_y=0.05)
+        self.dealer_label = GLabel(font_size=dp(24), size_hint_y=0.05)
         root.add_widget(self.dealer_label)
         self.dealer_row = make_row()
         self.dealer_row.size_hint_y = 0.23
@@ -675,33 +676,33 @@ class BlackjackScreen(Screen):
         self.player_row = make_row()
         self.player_row.size_hint_y = 0.23
         root.add_widget(self.player_row)
-        self.player_label = GLabel(font_size=24, size_hint_y=0.05)
+        self.player_label = GLabel(font_size=dp(24), size_hint_y=0.05)
         root.add_widget(self.player_label)
 
-        self.controls = BoxLayout(spacing=10, size_hint_y=0.12)
+        self.controls = BoxLayout(spacing=dp(10), size_hint_y=0.13)
         root.add_widget(self.controls)
 
         self.bet_button = RoundButton(btn_color=GRAY)
-        self.bet_button.font_size = 24
+        self.bet_button.font_size = dp(26)
         self.bet_button.bind(on_release=self.change_bet)
         self.deal_button = RoundButton(text="РАЗДАТЬ", btn_color=GREEN)
-        self.deal_button.font_size = 26
+        self.deal_button.font_size = dp(30)
         self.deal_button.bind(on_release=self.deal)
         self.hit_button = RoundButton(text="ЕЩЁ", btn_color=BLUE)
-        self.hit_button.font_size = 24
+        self.hit_button.font_size = dp(28)
         self.hit_button.bind(on_release=self.hit)
         self.stand_button = RoundButton(text="ХВАТИТ", btn_color=RED)
-        self.stand_button.font_size = 24
+        self.stand_button.font_size = dp(28)
         self.stand_button.bind(on_release=self.stand)
         self.double_button = RoundButton(text="УДВОИТЬ", btn_color=GOLD)
-        self.double_button.font_size = 22
+        self.double_button.font_size = dp(25)
         self.double_button.bind(on_release=self.double_down)
         self.double_down_button = self.double_button
         self.surrender_button = RoundButton(text="ПАС", btn_color=GRAY)
-        self.surrender_button.font_size = 22
+        self.surrender_button.font_size = dp(25)
         self.surrender_button.bind(on_release=self.surrender)
         self.split_button = RoundButton(text="СПЛИТ", btn_color=GOLD)
-        self.split_button.font_size = 22
+        self.split_button.font_size = dp(25)
         self.split_button.bind(on_release=self.split_hand)
 
         self.add_widget(root)
@@ -788,9 +789,9 @@ class BlackjackScreen(Screen):
 
     def pop_label(self, label, big, small):
         Animation.cancel_all(label, "font_size")
-        label.font_size = small
-        anim = Animation(font_size=big, duration=0.08)
-        anim += Animation(font_size=small, duration=0.25, t="out_back")
+        label.font_size = dp(small)
+        anim = Animation(font_size=dp(big), duration=0.08)
+        anim += Animation(font_size=dp(small), duration=0.25, t="out_back")
         anim.start(label)
 
     def set_message(self, text, color=WHITE, dots=False):
@@ -845,10 +846,10 @@ class BlackjackScreen(Screen):
     def show_banner(self, text, color, size=58):
         banner = GLabel(
             text=text,
-            font_size=10,
+            font_size=dp(10),
             color=color,
             size_hint=(1, None),
-            height=140,
+            height=dp(140),
             outline_width=4,
             outline_color=(0, 0, 0, 1),
         )
@@ -856,7 +857,7 @@ class BlackjackScreen(Screen):
         banner.center_y = self.message_label.center_y
         banner.opacity = 0
         self.add_widget(banner)
-        anim = Animation(font_size=size, opacity=1, duration=0.35, t="out_back")
+        anim = Animation(font_size=dp(size), opacity=1, duration=0.35, t="out_back")
         anim += Animation(duration=0.9)
         anim += Animation(opacity=0, y=banner.y + 40, duration=0.4)
         anim.bind(on_complete=remove_item)
@@ -868,7 +869,7 @@ class BlackjackScreen(Screen):
             star = Label(
                 text="✦",
                 font_name=FONT_SUITS,
-                font_size=random.randint(14, 28),
+                font_size=dp(random.randint(14, 28)),
                 color=color,
                 size_hint=(None, None),
             )
@@ -894,7 +895,7 @@ class BlackjackScreen(Screen):
             Clock.schedule_once(self.drop_confetti, random.uniform(0, 0.9))
 
     def drop_confetti(self, dt):
-        size = random.randint(18, 34)
+        size = dp(random.randint(18, 34))
         if random.random() < 0.55:
             item = Image(
                 source=random.choice(CHIP_LIST),
@@ -929,7 +930,9 @@ class BlackjackScreen(Screen):
         drop.bind(on_complete=remove_item)
         drop.start(item)
 
-    def fly_chip(self, source, start, end, delay=0.0, size=30):
+    def fly_chip(self, source, start, end, delay=0.0, size=None):
+        if size is None:
+            size = dp(30)
         Clock.schedule_once(partial(self.launch_chip, source, start, end, size), delay)
 
     def launch_chip(self, source, start, end, size, dt):
@@ -1046,7 +1049,7 @@ class BlackjackScreen(Screen):
 
     def add_card_view(self, row, views, card, hidden):
         view = CardView(card, hidden)
-        view.width = 8
+        view.width = dp(8)
         view.opacity = 0
         views.append(view)
         count = len(views)

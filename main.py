@@ -6,6 +6,7 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.graphics import Color, Line, RoundedRectangle
+from kivy.metrics import dp
 from kivy.properties import NumericProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
@@ -279,25 +280,25 @@ class StatTile(BoxLayout):
         # Title
         self.lbl_title = GLabel(
             text=title,
-            font_size=12,
+            font_size=dp(12),
             color=(0.72, 0.82, 0.92, 0.8),
             halign="left",
             valign="middle",
             size_hint_y=None,
-            height=16,
+            height=dp(16),
         )
         self.lbl_title.bind(size=self._sync_text)
         self.add_widget(self.lbl_title)
 
         # Value row
         val_row = BoxLayout(
-            orientation="horizontal", spacing=5, size_hint_y=None, height=30
+            orientation="horizontal", spacing=dp(5), size_hint_y=None, height=dp(30)
         )
         if icon_path:
-            val_row.add_widget(Image(source=icon_path, size_hint_x=None, width=22))
+            val_row.add_widget(Image(source=icon_path, size_hint_x=None, width=dp(22)))
         self.lbl_val = GLabel(
             text=value,
-            font_size=20,
+            font_size=dp(20),
             color=value_color,
             halign="left",
             valign="middle",
@@ -309,12 +310,12 @@ class StatTile(BoxLayout):
         # Subtext
         self.lbl_sub = GLabel(
             text=subtext,
-            font_size=11,
+            font_size=dp(11),
             color=(1, 1, 1, 0.45),
             halign="left",
             valign="middle",
             size_hint_y=None,
-            height=14,
+            height=dp(14),
         )
         self.lbl_sub.bind(size=self._sync_text)
         self.add_widget(self.lbl_sub)
@@ -367,7 +368,7 @@ class StatRow(BoxLayout):
 
         self.lbl_name = GLabel(
             text=label_text,
-            font_size=14,
+            font_size=dp(14),
             color=(0.85, 0.88, 0.92, 0.88),
             halign="left",
             valign="middle",
@@ -377,7 +378,7 @@ class StatRow(BoxLayout):
 
         self.lbl_val = GLabel(
             text=value_text,
-            font_size=16,
+            font_size=dp(16),
             color=value_color,
             halign="right",
             valign="middle",
@@ -414,8 +415,8 @@ class ResetConfirmModal(ModalView):
 
         container = BoxLayout(
             orientation="vertical",
-            padding=(18, 16),
-            spacing=10,
+            padding=(dp(18), dp(16)),
+            spacing=dp(10),
         )
         with container.canvas.before:
             Color(0.06, 0.10, 0.14, 0.98)
@@ -439,12 +440,12 @@ class ResetConfirmModal(ModalView):
         # Title
         lbl_title = GLabel(
             text="СБРОС СТАТИСТИКИ",
-            font_size=20,
+            font_size=dp(20),
             color=SOFT_RED,
             halign="center",
             valign="middle",
             size_hint_y=None,
-            height=26,
+            height=dp(26),
         )
         lbl_title.bind(size=lambda inst, *a: setattr(inst, "text_size", inst.size))
         container.add_widget(lbl_title)
@@ -452,7 +453,7 @@ class ResetConfirmModal(ModalView):
         # Message
         lbl_msg = GLabel(
             text="Обнулить всю историю раундов и рекорды?\nБаланс ваших фишек не изменится.",
-            font_size=13,
+            font_size=dp(13),
             color=(0.85, 0.88, 0.92, 0.9),
             halign="center",
             valign="middle",
@@ -463,14 +464,14 @@ class ResetConfirmModal(ModalView):
 
         # Buttons
         btn_box = BoxLayout(
-            orientation="horizontal", spacing=10, size_hint_y=None, height=44
+            orientation="horizontal", spacing=dp(10), size_hint_y=None, height=dp(44)
         )
         btn_cancel = RoundButton(text="ОТМЕНА", btn_color=GRAY, size_hint_x=0.5)
-        btn_cancel.font_size = 17
+        btn_cancel.font_size = dp(17)
         btn_cancel.bind(on_release=self.dismiss)
 
         btn_yes = RoundButton(text="СБРОСИТЬ", btn_color=RED, size_hint_x=0.5)
-        btn_yes.font_size = 17
+        btn_yes.font_size = dp(17)
 
         def _do_reset(*args):
             self.dismiss()
@@ -497,7 +498,7 @@ class StatsScreen(Screen):
         self._target_push_ratio = 0.0
         self._target_loss_ratio = 0.0
 
-        root = Page(padding=(14, 10, 14, 12), spacing=8)
+        root = Page(padding=(dp(14), dp(10), dp(14), dp(12)), spacing=dp(8))
 
         # 1. Top bar with back button & live balance counter
         self.top_bar = TopBar(self.go_menu)
@@ -506,10 +507,10 @@ class StatsScreen(Screen):
         # 2. Screen Header
         title = GLabel(
             text="СТАТИСТИКА ИГРОКА",
-            font_size=30,
+            font_size=dp(30),
             color=GOLD,
             size_hint_y=None,
-            height=36,
+            height=dp(36),
             halign="center",
             valign="middle",
         )
@@ -525,7 +526,7 @@ class StatsScreen(Screen):
         )
         self.content = BoxLayout(
             orientation="vertical",
-            spacing=10,
+            spacing=dp(10),
             size_hint_y=None,
             padding=(0, 2, 0, 8),
         )
@@ -535,14 +536,14 @@ class StatsScreen(Screen):
         self.vip_card = StatCard(
             bg_color=(0.05, 0.13, 0.10, 0.95),
             border_color=(1, 0.82, 0.25, 0.45),
-            height=106,
-            padding=(14, 10),
-            spacing=6,
+            height=dp(106),
+            padding=(dp(14), dp(10)),
+            spacing=dp(6),
         )
-        vip_header = BoxLayout(orientation="horizontal", size_hint_y=None, height=26)
+        vip_header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(26))
         self.vip_title = GLabel(
             text="Новичок",
-            font_size=18,
+            font_size=dp(18),
             color=GOLD,
             halign="left",
             valign="middle",
@@ -552,13 +553,13 @@ class StatsScreen(Screen):
 
         vip_badge_box = BoxLayout(
             orientation="horizontal",
-            spacing=4,
+            spacing=dp(4),
             size_hint_x=0.45,
         )
         self.vip_stars = GLabel(
             text="★",
             font_name=FONT_SUITS,
-            font_size=14,
+            font_size=dp(14),
             color=GOLD,
             halign="right",
             valign="middle",
@@ -567,7 +568,7 @@ class StatsScreen(Screen):
         self.vip_stars.bind(size=self._sync_text_size)
         self.vip_lvl_badge = GLabel(
             text="УР. 1",
-            font_size=12,
+            font_size=dp(12),
             color=(0.85, 0.92, 0.88, 0.85),
             halign="right",
             valign="middle",
@@ -580,12 +581,12 @@ class StatsScreen(Screen):
         vip_header.add_widget(self.vip_title)
         vip_header.add_widget(vip_badge_box)
 
-        self.vip_progress_bar = ProgressBarWidget(bar_color=GOLD, height=9)
+        self.vip_progress_bar = ProgressBarWidget(bar_color=GOLD, height=dp(9))
 
-        vip_sub_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=18)
+        vip_sub_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(18))
         self.vip_percent = GLabel(
             text="0%",
-            font_size=12,
+            font_size=dp(12),
             color=(0.7, 0.85, 0.78, 0.85),
             halign="left",
             valign="middle",
@@ -594,7 +595,7 @@ class StatsScreen(Screen):
         self.vip_percent.bind(size=self._sync_text_size)
         self.vip_subtext = GLabel(
             text="",
-            font_size=12,
+            font_size=dp(12),
             color=(1, 1, 1, 0.75),
             halign="right",
             valign="middle",
@@ -612,9 +613,9 @@ class StatsScreen(Screen):
         # --- B. 2x2 Financial & Performance Grid ---
         self.kpi_grid = GridLayout(
             cols=2,
-            spacing=8,
+            spacing=dp(8),
             size_hint_y=None,
-            height=168,
+            height=dp(168),
         )
 
         self.tile_bank = StatTile(
@@ -661,29 +662,29 @@ class StatsScreen(Screen):
         self.ratio_card = StatCard(
             bg_color=(0.04, 0.07, 0.11, 0.92),
             border_color=(1, 1, 1, 0.08),
-            height=96,
-            padding=(12, 8),
-            spacing=6,
+            height=dp(96),
+            padding=(dp(12), dp(8)),
+            spacing=dp(6),
         )
         lbl_ratio_title = GLabel(
             text="СООТНОШЕНИЕ РЕЗУЛЬТАТОВ",
-            font_size=13,
+            font_size=dp(13),
             color=(0.75, 0.85, 0.95, 0.8),
             halign="left",
             valign="middle",
             size_hint_y=None,
-            height=18,
+            height=dp(18),
         )
         lbl_ratio_title.bind(size=self._sync_text_size)
         self.ratio_card.add_widget(lbl_ratio_title)
 
-        self.ratio_bar = ResultRatioBar(height=12)
+        self.ratio_bar = ResultRatioBar(height=dp(12))
         self.ratio_card.add_widget(self.ratio_bar)
 
-        badges_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=20)
+        badges_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(20))
         self.badge_wins = GLabel(
             text="Побед: 0",
-            font_size=13,
+            font_size=dp(13),
             color=(0.25, 0.88, 0.45, 1),
             halign="left",
             valign="middle",
@@ -692,7 +693,7 @@ class StatsScreen(Screen):
         self.badge_wins.bind(size=self._sync_text_size)
         self.badge_pushes = GLabel(
             text="",
-            font_size=13,
+            font_size=dp(13),
             color=(0.4, 0.7, 1, 1),
             halign="center",
             valign="middle",
@@ -701,7 +702,7 @@ class StatsScreen(Screen):
         self.badge_pushes.bind(size=self._sync_text_size)
         self.badge_losses = GLabel(
             text="Поражений: 0",
-            font_size=13,
+            font_size=dp(13),
             color=SOFT_RED,
             halign="right",
             valign="middle",
@@ -719,19 +720,19 @@ class StatsScreen(Screen):
         self.records_card = StatCard(
             bg_color=(0.04, 0.07, 0.11, 0.92),
             border_color=(1, 1, 1, 0.08),
-            height=204,
-            padding=(10, 8),
-            spacing=2,
+            height=dp(204),
+            padding=(dp(10), dp(8)),
+            spacing=dp(2),
         )
         lbl_rec_title = GLabel(
             text="ДЕТАЛЬНАЯ СТАТИСТИКА",
-            font_size=13,
+            font_size=dp(13),
             color=(1, 0.82, 0.25, 0.85),
             halign="left",
             valign="middle",
             size_hint_y=None,
-            height=22,
-            padding=(4, 0),
+            height=dp(22),
+            padding=(dp(4), dp(0)),
         )
         lbl_rec_title.bind(size=self._sync_text_size)
         self.records_card.add_widget(lbl_rec_title)
@@ -751,20 +752,20 @@ class StatsScreen(Screen):
 
         # --- E. Actions Row (Reset Stats + Back) ---
         actions_row = BoxLayout(
-            orientation="horizontal", spacing=10, size_hint_y=None, height=48
+            orientation="horizontal", spacing=dp(10), size_hint_y=None, height=dp(48)
         )
         self.btn_reset = RoundButton(
             text="СБРОС СТАТИСТИКИ",
             btn_color=(0.35, 0.12, 0.15, 1),
             size_hint_x=0.52,
         )
-        self.btn_reset.font_size = 15
+        self.btn_reset.font_size = dp(15)
         self.btn_reset.bind(on_release=self.confirm_reset)
 
         back_btn = RoundButton(
             text="В МЕНЮ", btn_color=GRAY, size_hint_x=0.48
         )
-        back_btn.font_size = 18
+        back_btn.font_size = dp(18)
         back_btn.bind(on_release=self.go_menu)
 
         actions_row.add_widget(self.btn_reset)
@@ -944,41 +945,41 @@ class MenuScreen(Screen):
         self.wallet = wallet
         self.timer_event = None
 
-        root = Page(padding=20, spacing=7)
-        root.add_widget(Widget(size_hint_y=0.01))
+        root = Page(padding=dp(20), spacing=dp(9))
+        root.add_widget(Widget(size_hint_y=0.005))
 
         suits = GLabel(
             text="♠  ♥  ♦  ♣",
             font_name=FONT_SUITS,
-            font_size=28,
+            font_size=dp(34),
             color=(1, 1, 1, 0.55),
-            size_hint_y=0.04,
+            size_hint_y=0.045,
         )
         root.add_widget(suits)
 
         self.title = GLabel(
             text="LUCKY\nCASINO",
-            font_size=52,
+            font_size=dp(64),
             color=GOLD,
             halign="center",
-            size_hint_y=0.17,
+            size_hint_y=0.16,
             outline_width=3,
             outline_color=(0.25, 0.12, 0, 1),
         )
         root.add_widget(self.title)
 
-        balance_row = BoxLayout(spacing=8, size_hint_y=0.07)
+        balance_row = BoxLayout(spacing=dp(8), size_hint_y=0.065)
         balance_row.add_widget(Widget())
-        balance_row.add_widget(Image(source=CHIP_IMAGE, size_hint_x=None, width=42))
-        self.balance_label = GLabel(font_size=28, size_hint_x=None, width=130)
+        balance_row.add_widget(Image(source=CHIP_IMAGE, size_hint_x=None, width=dp(52)))
+        self.balance_label = GLabel(font_size=dp(36), size_hint_x=None, width=dp(160))
         balance_row.add_widget(self.balance_label)
         balance_row.add_widget(Widget())
         root.add_widget(balance_row)
 
         self.daily_button = RoundButton(
-            text="ЕЖЕДНЕВНЫЙ БОНУС", btn_color=GOLD, size_hint_y=0.075
+            text="ЕЖЕДНЕВНЫЙ БОНУС", btn_color=GOLD, size_hint_y=0.08
         )
-        self.daily_button.font_size = 19
+        self.daily_button.font_size = dp(24)
         self.daily_button.bind(on_release=self.claim_daily_bonus)
         root.add_widget(self.daily_button)
 
@@ -992,17 +993,17 @@ class MenuScreen(Screen):
 
         note = GLabel(
             text="Игра на виртуальные фишки, без реальных денег",
-            font_size=14,
+            font_size=dp(17),
             color=(1, 1, 1, 0.45),
-            size_hint_y=0.035,
+            size_hint_y=0.04,
         )
         root.add_widget(note)
 
         self.add_widget(root)
 
     def add_menu_button(self, root, text, color, handler):
-        button = RoundButton(text=text, btn_color=color, size_hint_y=0.07)
-        button.font_size = 21
+        button = RoundButton(text=text, btn_color=color, size_hint_y=0.076)
+        button.font_size = dp(28)
         button.bind(on_release=handler)
         root.add_widget(button)
         self.menu_buttons.append(button)

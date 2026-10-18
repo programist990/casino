@@ -2,6 +2,7 @@ import math
 from functools import partial
 
 from kivy.animation import Animation
+from kivy.metrics import dp
 from kivy.clock import Clock
 from kivy.core.text import Label as CoreLabel
 from kivy.graphics import (
@@ -58,8 +59,8 @@ class WheelBadge(GLabel):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
-        self.size = (96, 44)
-        self.font_size = 30
+        self.size = (dp(104), dp(48))
+        self.font_size = dp(30)
         with self.canvas.before:
             Color(1, 0.82, 0.25, 0.9)
             self.outline = RoundedRectangle(radius=[14])
@@ -83,8 +84,8 @@ class WheelBadge(GLabel):
 
     def pop(self):
         Animation.cancel_all(self, "font_size")
-        anim = Animation(font_size=42, duration=0.12)
-        anim += Animation(font_size=30, duration=0.3, t="out_bounce")
+        anim = Animation(font_size=dp(42), duration=0.12)
+        anim += Animation(font_size=dp(30), duration=0.3, t="out_bounce")
         anim.start(self)
 
 
@@ -124,7 +125,7 @@ class WheelCap(StencilView):
 
     def number_texture(self, number):
         if number not in self.textures:
-            label = CoreLabel(text=str(number), font_size=15, font_name=FONT_TITLE)
+            label = CoreLabel(text=str(number), font_size=dp(15), font_name=FONT_TITLE)
             label.refresh()
             self.textures[number] = label.texture
         return self.textures[number]

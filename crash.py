@@ -2,6 +2,7 @@ import math
 import random
 
 from kivy.animation import Animation
+from kivy.metrics import dp
 from kivy.clock import Clock
 from kivy.graphics import (
     Color,
@@ -391,9 +392,9 @@ class CrashGraph(Widget):
 class CrashHistoryBadge(GLabel):
     def __init__(self, mult, **kwargs):
         super().__init__(text=f"{mult:.2f}x", **kwargs)
-        self.font_size = 16
+        self.font_size = dp(16)
         self.size_hint = (None, None)
-        self.size = (75, 34)
+        self.size = (dp(80), dp(38))
         color = GOLD if mult >= 2.0 else (SOFT_RED if mult < 1.5 else WHITE)
         self.color = color
         with self.canvas.before:
@@ -424,16 +425,16 @@ class CrashScreen(Screen):
         self.tick_event = None
         self.start_time = 0
 
-        root = Page(padding=16, spacing=10)
+        root = Page(padding=dp(16), spacing=dp(10))
 
         self.top_bar = TopBar(self.go_menu)
         root.add_widget(self.top_bar)
 
-        title = GLabel(text="CRASH РАКЕТА", font_size=36, color=GOLD, size_hint_y=0.08)
+        title = GLabel(text="CRASH РАКЕТА", font_size=dp(36), color=GOLD, size_hint_y=0.08)
         root.add_widget(title)
 
         # History row
-        self.history_row = BoxLayout(spacing=6, size_hint_y=0.05)
+        self.history_row = BoxLayout(spacing=dp(6), size_hint_y=0.05)
         root.add_widget(self.history_row)
 
         # Main graph display with animated flying rocket background
@@ -443,7 +444,7 @@ class CrashScreen(Screen):
 
         self.mult_label = GLabel(
             text="1.00x",
-            font_size=58,
+            font_size=dp(58),
             color=GOLD,
             pos_hint={"center_x": 0.5, "center_y": 0.55},
             size_hint=(None, None),
@@ -458,14 +459,14 @@ class CrashScreen(Screen):
 
         # Controls
         self.bet_button = RoundButton(btn_color=GRAY, size_hint_y=0.09)
-        self.bet_button.font_size = 24
+        self.bet_button.font_size = dp(24)
         self.bet_button.bind(on_release=self.change_bet)
         root.add_widget(self.bet_button)
 
         self.action_button = RoundButton(
             text="СТАРТ", btn_color=GREEN, size_hint_y=0.15
         )
-        self.action_button.font_size = 32
+        self.action_button.font_size = dp(32)
         self.action_button.bind(on_release=self.on_action)
         root.add_widget(self.action_button)
 

@@ -1,6 +1,7 @@
 import random
 
 from kivy.animation import Animation
+from kivy.metrics import dp
 from kivy.clock import Clock
 from kivy.graphics import Color, Line, RoundedRectangle
 from kivy.uix.boxlayout import BoxLayout
@@ -125,7 +126,7 @@ class RouletteBetButton(Button):
         self.background_down = ""
         self.background_color = (0, 0, 0, 0)
         self.font_name = FONT_TITLE
-        self.font_size = 19
+        self.font_size = dp(19)
 
         with self.canvas.before:
             Color(0, 0, 0, 0.35)
@@ -204,7 +205,7 @@ class NumberBetButton(Button):
         self.background_down = ""
         self.background_color = (0, 0, 0, 0)
         self.font_name = FONT_TITLE
-        self.font_size = 21
+        self.font_size = dp(21)
 
         with self.canvas.before:
             Color(0, 0, 0, 0.35)
@@ -260,9 +261,9 @@ class ChipLabel(GLabel):
 
     def __init__(self, number, **kwargs):
         super().__init__(text=str(number), **kwargs)
-        self.font_size = 18
+        self.font_size = dp(18)
         self.size_hint = (None, None)
-        self.size = (40, 40)
+        self.size = (dp(44), dp(44))
         self.pos_hint = {"center_y": 0.5}
         with self.canvas.before:
             Color(*color_rgba(number))
@@ -290,12 +291,12 @@ class RouletteScreen(Screen):
 
         self.tick_sound_event = None
 
-        root = Page(padding=16, spacing=7)
+        root = Page(padding=dp(16), spacing=dp(7))
 
         self.top_bar = TopBar(self.go_menu)
         root.add_widget(self.top_bar)
 
-        title = GLabel(text="РУЛЕТКА", font_size=36, color=GOLD, size_hint_y=0.065)
+        title = GLabel(text="РУЛЕТКА", font_size=dp(36), color=GOLD, size_hint_y=0.065)
         root.add_widget(title)
 
         self.wheel = WheelCap(size_hint_y=0.23)
@@ -305,11 +306,11 @@ class RouletteScreen(Screen):
         root.add_widget(self.message_label)
 
         # Recent pockets history row
-        self.history_row = BoxLayout(spacing=5, size_hint_y=0.06)
+        self.history_row = BoxLayout(spacing=dp(5), size_hint_y=0.06)
         root.add_widget(self.history_row)
 
         # 1. Simple Bets Grid (2 cols x 3 rows)
-        grid = GridLayout(cols=2, spacing=6, size_hint_y=0.21)
+        grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=0.21)
         self.kind_buttons = {}
         for kind, text, mult, color in SIMPLE_BETS:
             btn = RouletteBetButton(
@@ -321,7 +322,7 @@ class RouletteScreen(Screen):
         root.add_widget(grid)
 
         # 2. Dozens Row (3 bets)
-        dozen_row = BoxLayout(spacing=6, size_hint_y=0.065)
+        dozen_row = BoxLayout(spacing=dp(6), size_hint_y=0.065)
         dozen_color = (0.13, 0.44, 0.28, 1)
         for kind, text, mult in DOZEN_BETS:
             btn = RouletteBetButton(
@@ -333,16 +334,16 @@ class RouletteScreen(Screen):
         root.add_widget(dozen_row)
 
         # 3. Interactive Number Bet Row
-        number_row = BoxLayout(spacing=6, size_hint_y=0.07)
+        number_row = BoxLayout(spacing=dp(6), size_hint_y=0.07)
         minus_button = RoundButton(text="-", btn_color=GRAY, size_hint_x=0.22)
-        minus_button.font_size = 24
+        minus_button.font_size = dp(24)
         minus_button.bind(on_release=self.pick_minus)
 
         self.number_button = NumberBetButton(size_hint_x=0.56)
         self.number_button.bind(on_release=self.select_number_bet)
 
         plus_button = RoundButton(text="+", btn_color=GRAY, size_hint_x=0.22)
-        plus_button.font_size = 24
+        plus_button.font_size = dp(24)
         plus_button.bind(on_release=self.pick_plus)
 
         number_row.add_widget(minus_button)
@@ -351,13 +352,13 @@ class RouletteScreen(Screen):
         root.add_widget(number_row)
 
         # 4. Bottom Controls: Bet amount and Spin button
-        controls = BoxLayout(spacing=8, size_hint_y=0.10)
+        controls = BoxLayout(spacing=dp(8), size_hint_y=0.10)
         self.bet_button = RoundButton(btn_color=GRAY)
-        self.bet_button.font_size = 24
+        self.bet_button.font_size = dp(24)
         self.bet_button.bind(on_release=self.change_bet)
 
         self.spin_button = RoundButton(text="КРУТИТЬ", btn_color=GREEN)
-        self.spin_button.font_size = 28
+        self.spin_button.font_size = dp(28)
         self.spin_button.bind(on_release=self.spin)
 
         controls.add_widget(self.bet_button)

@@ -2,6 +2,7 @@ import random
 from functools import partial
 
 from kivy.animation import Animation
+from kivy.metrics import dp
 from kivy.clock import Clock
 from kivy.graphics import Color, Line, RoundedRectangle
 from kivy.properties import NumericProperty
@@ -151,17 +152,17 @@ class SlotsScreen(Screen):
         self.result = []
         self.tick_event = None
 
-        root = Page(padding=16, spacing=10)
+        root = Page(padding=dp(16), spacing=dp(10))
 
         self.top_bar = TopBar(self.go_menu)
         root.add_widget(self.top_bar)
 
         title = GLabel(
-            text="SLOTS", font_size=38, color=GOLD, size_hint_y=0.09
+            text="SLOTS", font_size=dp(38), color=GOLD, size_hint_y=0.09
         )
         root.add_widget(title)
 
-        reels_row = BoxLayout(spacing=10, size_hint_y=0.3)
+        reels_row = BoxLayout(spacing=dp(10), size_hint_y=0.3)
         self.reels = []
         for i in range(3):
             reel = Reel()
@@ -174,12 +175,12 @@ class SlotsScreen(Screen):
 
         root.add_widget(self.build_paytable())
 
-        btn_row = BoxLayout(spacing=8, size_hint_y=0.09)
+        btn_row = BoxLayout(spacing=dp(8), size_hint_y=0.09)
         self.bet_button = RoundButton(btn_color=GRAY)
-        self.bet_button.font_size = 24
+        self.bet_button.font_size = dp(24)
         self.bet_button.bind(on_release=self.change_bet)
         self.autospin_button = RoundButton(text="АВТО: ВЫКЛ", btn_color=BLUE)
-        self.autospin_button.font_size = 24
+        self.autospin_button.font_size = dp(24)
         self.autospin_button.bind(on_release=self.toggle_autospin)
         btn_row.add_widget(self.bet_button)
         btn_row.add_widget(self.autospin_button)
@@ -188,19 +189,19 @@ class SlotsScreen(Screen):
         self.spin_button = RoundButton(
             text="КРУТИТЬ", btn_color=GREEN, size_hint_y=0.14
         )
-        self.spin_button.font_size = 32
+        self.spin_button.font_size = dp(32)
         self.spin_button.bind(on_release=self.spin)
         root.add_widget(self.spin_button)
 
         self.add_widget(root)
 
     def build_paytable(self):
-        grid = GridLayout(cols=3, spacing=6, size_hint_y=0.12)
+        grid = GridLayout(cols=3, spacing=dp(6), size_hint_y=0.12)
         for symbol in SYMBOLS:
-            cell = BoxLayout(spacing=2)
+            cell = BoxLayout(spacing=dp(2))
             cell.add_widget(Image(source=symbol["image"], size_hint_x=0.45))
             cell.add_widget(
-                GLabel(text="x" + str(symbol["pay"]), font_size=19, color=GOLD)
+                GLabel(text="x" + str(symbol["pay"]), font_size=dp(19), color=GOLD)
             )
             grid.add_widget(cell)
         return grid
