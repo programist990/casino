@@ -9,8 +9,12 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 DEST="$HOME/casino_build"
 VENV="$HOME/buildozer-venv"
 export PATH="$VENV/bin:$PATH"
+export VIRTUAL_ENV="$VENV"
+export VIRTUAL_ENV="$VENV"
 # buildozer looks for cython in PATH, so the venv must be first there
 export PATH="$VENV/bin:$PATH"
+export VIRTUAL_ENV="$VENV"
+export VIRTUAL_ENV="$VENV"
 
 # 0. checks
 for cmd in python3 java rsync unzip zip git; do

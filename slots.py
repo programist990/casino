@@ -157,7 +157,7 @@ class SlotsScreen(Screen):
         root.add_widget(self.top_bar)
 
         title = GLabel(
-            text="SLOTS", font_size=34, color=GOLD, size_hint_y=0.09
+            text="SLOTS", font_size=38, color=GOLD, size_hint_y=0.09
         )
         root.add_widget(title)
 
@@ -176,8 +176,10 @@ class SlotsScreen(Screen):
 
         btn_row = BoxLayout(spacing=8, size_hint_y=0.09)
         self.bet_button = RoundButton(btn_color=GRAY)
+        self.bet_button.font_size = 24
         self.bet_button.bind(on_release=self.change_bet)
         self.autospin_button = RoundButton(text="АВТО: ВЫКЛ", btn_color=BLUE)
+        self.autospin_button.font_size = 24
         self.autospin_button.bind(on_release=self.toggle_autospin)
         btn_row.add_widget(self.bet_button)
         btn_row.add_widget(self.autospin_button)
@@ -186,7 +188,7 @@ class SlotsScreen(Screen):
         self.spin_button = RoundButton(
             text="КРУТИТЬ", btn_color=GREEN, size_hint_y=0.14
         )
-        self.spin_button.font_size = 28
+        self.spin_button.font_size = 32
         self.spin_button.bind(on_release=self.spin)
         root.add_widget(self.spin_button)
 
@@ -198,7 +200,7 @@ class SlotsScreen(Screen):
             cell = BoxLayout(spacing=2)
             cell.add_widget(Image(source=symbol["image"], size_hint_x=0.45))
             cell.add_widget(
-                GLabel(text="x" + str(symbol["pay"]), font_size=16, color=GOLD)
+                GLabel(text="x" + str(symbol["pay"]), font_size=19, color=GOLD)
             )
             grid.add_widget(cell)
         return grid

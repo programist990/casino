@@ -145,6 +145,17 @@ class Wallet:
             self.stats["total_lost"] += abs(net_win)
         self.save()
 
+    def reset_stats(self):
+        self.stats = {
+            "games_played": 0,
+            "wins": 0,
+            "losses": 0,
+            "biggest_win": 0,
+            "total_won": 0,
+            "total_lost": 0,
+        }
+        self.save()
+
     def can_claim_daily(self):
         return (time.time() - self.last_daily) >= self.DAILY_COOLDOWN
 
@@ -226,7 +237,7 @@ class MessageLabel(GLabel):
     """Status line on a soft dark plate, wraps long text."""
 
     def __init__(self, **kwargs):
-        kwargs.setdefault("font_size", 20)
+        kwargs.setdefault("font_size", 22)
         super().__init__(**kwargs)
         self.halign = "center"
         self.valign = "middle"
@@ -250,7 +261,7 @@ class RoundButton(Button):
         self.background_down = ""
         self.background_color = (0, 0, 0, 0)
         self.font_name = FONT_TITLE
-        self.font_size = 22
+        self.font_size = 24
         self.btn_color = btn_color
         with self.canvas.before:
             Color(0, 0, 0, 0.35)
@@ -302,15 +313,15 @@ class TopBar(BoxLayout):
         self.first_time = True
 
         back_button = RoundButton(text="Меню", btn_color=GRAY, size_hint_x=0.3)
-        back_button.font_size = 18
+        back_button.font_size = 20
         back_button.bind(on_release=on_back)
         self.add_widget(back_button)
 
-        self.balance_label = GLabel(font_size=26, color=GOLD, halign="right", valign="middle")
+        self.balance_label = GLabel(font_size=28, color=GOLD, halign="right", valign="middle")
         self.balance_label.bind(size=self.update_text_size)
         self.add_widget(self.balance_label)
 
-        chip = Image(source=CHIP_IMAGE, size_hint_x=None, width=44)
+        chip = Image(source=CHIP_IMAGE, size_hint_x=None, width=46)
         self.add_widget(chip)
 
     def update_text_size(self, *args):

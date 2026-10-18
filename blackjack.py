@@ -50,9 +50,9 @@ from common import (
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 SUITS = ["S", "H", "D", "C"]  # spades, hearts, diamonds, clubs
 SUIT_SYMBOLS = {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
-CARD_W = 58
-CARD_H = 86
-CARD_GAP = 6
+CARD_W = 104
+CARD_H = 152
+CARD_GAP = 8
 FLIGHT = 0.3  # how long a card flies from the shoe to the table
 CARD_DELAY = 0.4  # pause between dealt cards
 RED_CARD = (0.85, 0.1, 0.1, 1)
@@ -201,20 +201,20 @@ class CardView(BoxLayout):
             PushMatrix()
             self.rotation = Rotate(angle=0, origin=(0, 0))
             Color(0, 0, 0, 0.3)
-            self.shadow = RoundedRectangle(radius=[10])
+            self.shadow = RoundedRectangle(radius=[12])
             self.face_color = Color(1, 1, 1, 1)
-            self.bg = RoundedRectangle(radius=[10])
+            self.bg = RoundedRectangle(radius=[12])
             self.back_color = Color(1, 1, 1, 0)
-            self.back = RoundedRectangle(radius=[10], **tex(CARD_BACK))
+            self.back = RoundedRectangle(radius=[12], **tex(CARD_BACK))
             self.edge_color = Color(0, 0, 0, 0.28)
-            self.edge = Line(rounded_rectangle=(0, 0, 20, 20, 10), width=1)
+            self.edge = Line(rounded_rectangle=(0, 0, 20, 20, 12), width=1.2)
             self.frame_color = Color(1, 0.82, 0.25, 0)
-            self.frame = Line(rounded_rectangle=(0, 0, 20, 20, 7), width=1.3)
+            self.frame = Line(rounded_rectangle=(0, 0, 20, 20, 8), width=1.4)
         with self.canvas.after:
             PopMatrix()
 
-        self.rank_label = Label(font_name=FONT_TITLE, font_size=24)
-        self.suit_label = Label(font_name=FONT_SUITS, font_size=32)
+        self.rank_label = Label(font_name=FONT_TITLE, font_size=36)
+        self.suit_label = Label(font_name=FONT_SUITS, font_size=48)
         self.add_widget(self.rank_label)
         self.add_widget(self.suit_label)
 
@@ -226,18 +226,18 @@ class CardView(BoxLayout):
         width, height = self.size
         self.rotation.angle = self.angle
         self.rotation.origin = self.center
-        self.shadow.pos = (x + 2, y - 3)
+        self.shadow.pos = (x + 3, y - 4)
         self.shadow.size = self.size
         self.bg.pos = self.pos
         self.bg.size = self.size
         self.back.pos = self.pos
         self.back.size = self.size
         # thin outlines look broken while the card is squeezed during a flip
-        if width >= 24:
+        if width >= 28:
             self.edge_color.a = 0.28
             self.frame_color.a = self.frame_target
-            self.edge.rounded_rectangle = (x, y, width, height, 10)
-            self.frame.rounded_rectangle = (x + 4, y + 4, width - 8, height - 8, 7)
+            self.edge.rounded_rectangle = (x, y, width, height, 12)
+            self.frame.rounded_rectangle = (x + 5, y + 5, width - 10, height - 10, 8)
         else:
             self.edge_color.a = 0
             self.frame_color.a = 0
@@ -268,9 +268,9 @@ class CardView(BoxLayout):
             self.suit_label.text = SUIT_SYMBOLS[suit]
             self.suit_label.color = color
             if rank == "A":
-                self.suit_label.font_size = 42
+                self.suit_label.font_size = 62
             else:
-                self.suit_label.font_size = 32
+                self.suit_label.font_size = 48
             if rank == "J" or rank == "Q" or rank == "K":
                 self.frame_target = 0.9
             else:
@@ -324,7 +324,7 @@ class Shoe(Widget):
     nudge = NumericProperty(0)
 
     def __init__(self, **kwargs):
-        super().__init__(size_hint=(None, None), size=(44, 62), **kwargs)
+        super().__init__(size_hint=(None, None), size=(52, 74), **kwargs)
         self.bind(pos=self.redraw, size=self.redraw, nudge=self.redraw)
         self.redraw()
 
@@ -338,9 +338,9 @@ class Shoe(Widget):
                 if i == 3:
                     x = x - self.nudge
                 Color(0, 0, 0, 0.3)
-                RoundedRectangle(pos=(x + 2, y - 2), size=self.size, radius=[7])
+                RoundedRectangle(pos=(x + 2, y - 2), size=self.size, radius=[8])
                 Color(1, 1, 1, 1)
-                RoundedRectangle(pos=(x, y), size=self.size, radius=[7], **tex(CARD_BACK))
+                RoundedRectangle(pos=(x, y), size=self.size, radius=[8], **tex(CARD_BACK))
 
     def kick(self):
         Animation.cancel_all(self, "nudge")
@@ -659,40 +659,49 @@ class BlackjackScreen(Screen):
         root.add_widget(self.top_bar)
 
         self.title_label = GLabel(
-            text="BLACKJACK", font_size=32, color=GOLD, size_hint_y=0.08
+            text="BLACKJACK", font_size=36, color=GOLD, size_hint_y=0.07
         )
         root.add_widget(self.title_label)
 
-        self.dealer_label = GLabel(font_size=20, size_hint_y=0.06)
+        self.dealer_label = GLabel(font_size=24, size_hint_y=0.05)
         root.add_widget(self.dealer_label)
         self.dealer_row = make_row()
+        self.dealer_row.size_hint_y = 0.23
         root.add_widget(self.dealer_row)
 
-        self.message_label = MessageLabel(size_hint_y=0.1)
+        self.message_label = MessageLabel(size_hint_y=0.08)
         root.add_widget(self.message_label)
 
         self.player_row = make_row()
+        self.player_row.size_hint_y = 0.23
         root.add_widget(self.player_row)
-        self.player_label = GLabel(font_size=20, size_hint_y=0.06)
+        self.player_label = GLabel(font_size=24, size_hint_y=0.05)
         root.add_widget(self.player_label)
 
-        self.controls = BoxLayout(spacing=10, size_hint_y=0.13)
+        self.controls = BoxLayout(spacing=10, size_hint_y=0.12)
         root.add_widget(self.controls)
 
         self.bet_button = RoundButton(btn_color=GRAY)
+        self.bet_button.font_size = 24
         self.bet_button.bind(on_release=self.change_bet)
         self.deal_button = RoundButton(text="РАЗДАТЬ", btn_color=GREEN)
+        self.deal_button.font_size = 26
         self.deal_button.bind(on_release=self.deal)
         self.hit_button = RoundButton(text="ЕЩЁ", btn_color=BLUE)
+        self.hit_button.font_size = 24
         self.hit_button.bind(on_release=self.hit)
         self.stand_button = RoundButton(text="ХВАТИТ", btn_color=RED)
+        self.stand_button.font_size = 24
         self.stand_button.bind(on_release=self.stand)
         self.double_button = RoundButton(text="УДВОИТЬ", btn_color=GOLD)
+        self.double_button.font_size = 22
         self.double_button.bind(on_release=self.double_down)
         self.double_down_button = self.double_button
         self.surrender_button = RoundButton(text="ПАС", btn_color=GRAY)
+        self.surrender_button.font_size = 22
         self.surrender_button.bind(on_release=self.surrender)
         self.split_button = RoundButton(text="СПЛИТ", btn_color=GOLD)
+        self.split_button.font_size = 22
         self.split_button.bind(on_release=self.split_hand)
 
         self.add_widget(root)
