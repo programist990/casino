@@ -126,7 +126,7 @@ class ProgressBarWidget(Widget):
 
     def __init__(self, bar_color=GOLD, track_color=(0.02, 0.05, 0.08, 0.95), **kwargs):
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", 10)
+        kwargs.setdefault("height", dp(10))
         super().__init__(**kwargs)
         self.bar_color = bar_color
         self.track_color = track_color
@@ -160,7 +160,7 @@ class ResultRatioBar(Widget):
 
     def __init__(self, **kwargs):
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", 14)
+        kwargs.setdefault("height", dp(14))
         super().__init__(**kwargs)
 
         with self.canvas.before:
@@ -253,10 +253,10 @@ class StatTile(BoxLayout):
         **kwargs,
     ):
         kwargs.setdefault("orientation", "vertical")
-        kwargs.setdefault("padding", (10, 8))
-        kwargs.setdefault("spacing", 2)
+        kwargs.setdefault("padding", (dp(10), dp(8)))
+        kwargs.setdefault("spacing", dp(2))
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", 80)
+        kwargs.setdefault("height", dp(80))
         super().__init__(**kwargs)
         self.bg_color = bg_color
         self.border_color = border_color
@@ -356,8 +356,8 @@ class StatRow(BoxLayout):
     ):
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", 34)
-        kwargs.setdefault("padding", (10, 0))
+        kwargs.setdefault("height", dp(34))
+        kwargs.setdefault("padding", (dp(10), 0))
         super().__init__(**kwargs)
 
         if is_alternate:
@@ -407,7 +407,7 @@ class ResetConfirmModal(ModalView):
 
     def __init__(self, on_confirm, **kwargs):
         kwargs.setdefault("size_hint", (0.86, None))
-        kwargs.setdefault("height", 210)
+        kwargs.setdefault("height", dp(210))
         kwargs.setdefault("auto_dismiss", True)
         super().__init__(**kwargs)
         self.background_color = (0, 0, 0, 0.72)

@@ -51,8 +51,8 @@ from common import (
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
 SUITS = ["S", "H", "D", "C"]  # spades, hearts, diamonds, clubs
 SUIT_SYMBOLS = {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
-CARD_W = dp(118)
-CARD_H = dp(172)
+CARD_W = dp(112)
+CARD_H = dp(164)
 CARD_GAP = dp(8)
 FLIGHT = 0.3  # how long a card flies from the shoe to the table
 CARD_DELAY = 0.4  # pause between dealt cards
@@ -214,8 +214,8 @@ class CardView(BoxLayout):
         with self.canvas.after:
             PopMatrix()
 
-        self.rank_label = Label(font_name=FONT_TITLE, font_size=dp(42))
-        self.suit_label = Label(font_name=FONT_SUITS, font_size=dp(54))
+        self.rank_label = Label(font_name=FONT_TITLE, font_size=dp(40))
+        self.suit_label = Label(font_name=FONT_SUITS, font_size=dp(52))
         self.add_widget(self.rank_label)
         self.add_widget(self.suit_label)
 
@@ -269,9 +269,9 @@ class CardView(BoxLayout):
             self.suit_label.text = SUIT_SYMBOLS[suit]
             self.suit_label.color = color
             if rank == "A":
-                self.suit_label.font_size = dp(70)
+                self.suit_label.font_size = dp(66)
             else:
-                self.suit_label.font_size = dp(54)
+                self.suit_label.font_size = dp(52)
             if rank == "J" or rank == "Q" or rank == "K":
                 self.frame_target = 0.9
             else:
@@ -679,7 +679,7 @@ class BlackjackScreen(Screen):
         self.player_label = GLabel(font_size=dp(24), size_hint_y=0.05)
         root.add_widget(self.player_label)
 
-        self.controls = BoxLayout(spacing=dp(10), size_hint_y=0.13)
+        self.controls = BoxLayout(spacing=dp(8), size_hint_y=0.115)
         root.add_widget(self.controls)
 
         self.bet_button = RoundButton(btn_color=GRAY)
@@ -714,6 +714,7 @@ class BlackjackScreen(Screen):
 
         self.table_bg.track(self.title_label, self.dealer_row, self.player_row)
         self.player_label.bind(pos=self.place_overlays, size=self.place_overlays)
+        self.title_label.bind(pos=self.place_overlays, size=self.place_overlays)
         self.bind(size=self.place_overlays)
         Clock.schedule_once(self.place_overlays, 0)
 

@@ -279,6 +279,30 @@ class RoundButton(Button):
         )
         self.update_bg()
 
+        # the text never sticks out of the button: the font shrinks if needed
+        self._base_font = self.font_size
+        self._fitting = False
+        self.bind(font_size=self._remember_font, text=self._fit_text, width=self._fit_text)
+
+    def _remember_font(self, *args):
+        if not self._fitting:
+            self._base_font = self.font_size
+            self._fit_text()
+
+    def _fit_text(self, *args):
+        if self._fitting or self.width < dp(20) or not self.text:
+            return
+        self._fitting = True
+        try:
+            self.font_size = self._base_font
+            self.texture_update()
+            available = self.width - dp(14)
+            text_width = self.texture_size[0]
+            if text_width > available > 0:
+                self.font_size = max(dp(9), self._base_font * available / text_width)
+        finally:
+            self._fitting = False
+
     def update_bg(self, *args):
         x, y = self.pos
         width, height = self.size
