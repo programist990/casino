@@ -17,7 +17,9 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 from kivy.utils import platform
 
+import city_data as city_rules
 from blackjack import BlackjackScreen
+from city import CityScreen
 from crash import CrashScreen
 from common import (
     BLUE,
@@ -988,6 +990,7 @@ class MenuScreen(Screen):
         self.add_menu_button(root, "Блэкджек", BLUE, self.open_blackjack)
         self.add_menu_button(root, "Рулетка", RED, self.open_roulette)
         self.add_menu_button(root, "Краш (Ракета)", GOLD, self.open_crash)
+        self.city_button = self.add_menu_button(root, "Город", (0.55, 0.3, 0.75, 1), self.open_city)
         self.add_menu_button(root, "Статистика", GRAY, self.open_stats)
         self.add_menu_button(root, "Выход", (0.2, 0.2, 0.25, 1), self.exit_app)
 
@@ -1007,6 +1010,7 @@ class MenuScreen(Screen):
         button.bind(on_release=handler)
         root.add_widget(button)
         self.menu_buttons.append(button)
+        return button
 
     def update_daily_button(self, *args):
         if self.wallet.can_claim_daily():
@@ -1021,6 +1025,15 @@ class MenuScreen(Screen):
             self.daily_button.text = f"Бонус через: {h:02d}:{m:02d}:{s:02d}"
             self.daily_button.btn_color = GRAY
             self.daily_button.disabled = True
+        self.update_city_button()
+
+    def update_city_button(self):
+        """Shows how many chips the city has earned while the player was away."""
+        waiting = int(city_rules.pending(self.wallet.city))
+        if waiting >= 1:
+            self.city_button.text = f"Город  (+{format_chips(waiting)})"
+        else:
+            self.city_button.text = "Город"
 
     def claim_daily_bonus(self, *args):
         if self.wallet.claim_daily():
@@ -1078,6 +1091,10 @@ class MenuScreen(Screen):
         Sfx.play("click")
         go_to(self.manager, "crash", "left")
 
+    def open_city(self, *args):
+        Sfx.play("click")
+        go_to(self.manager, "city", "left")
+
     def open_stats(self, *args):
         Sfx.play("click")
         go_to(self.manager, "stats", "left")
@@ -1104,6 +1121,7 @@ class CasinoApp(App):
         manager.add_widget(BlackjackScreen(wallet, name="blackjack"))
         manager.add_widget(RouletteScreen(wallet, name="roulette"))
         manager.add_widget(CrashScreen(wallet, name="crash"))
+        manager.add_widget(CityScreen(wallet, name="city"))
         manager.add_widget(StatsScreen(wallet, name="stats"))
         self.manager = manager
         Window.bind(on_keyboard=self.on_key)

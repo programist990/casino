@@ -13,6 +13,8 @@ from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 
+from city_data import new_city, sanitize_city
+
 START_BALANCE = 1000
 BETS = [10, 50, 100, 500]
 
@@ -90,6 +92,7 @@ class Wallet:
             "total_won": 0,
             "total_lost": 0,
         }
+        self.city = new_city()
         self.load()
 
     def load(self):
@@ -105,6 +108,7 @@ class Wallet:
             for key in self.stats:
                 if key in loaded_stats:
                     self.stats[key] = int(loaded_stats[key])
+            self.city = sanitize_city(data.get("city"))
         except (ValueError, KeyError, OSError):
             self.balance = START_BALANCE
 
@@ -116,6 +120,7 @@ class Wallet:
                         "balance": self.balance,
                         "last_daily": self.last_daily,
                         "stats": self.stats,
+                        "city": self.city,
                     },
                     file,
                     indent=2,
