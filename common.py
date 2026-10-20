@@ -15,7 +15,7 @@ from kivy.uix.label import Label
 
 from city_data import new_city, sanitize_city
 
-START_BALANCE = 1000
+START_BALANCE = 1000000
 BETS = [10, 50, 100, 500]
 
 # ----- theme -----
@@ -287,7 +287,9 @@ class RoundButton(Button):
         # the text never sticks out of the button: the font shrinks if needed
         self._base_font = self.font_size
         self._fitting = False
-        self.bind(font_size=self._remember_font, text=self._fit_text, width=self._fit_text)
+        self.bind(
+            font_size=self._remember_font, text=self._fit_text, width=self._fit_text
+        )
 
     def _remember_font(self, *args):
         if not self._fitting:
@@ -347,7 +349,9 @@ class TopBar(BoxLayout):
         back_button.bind(on_release=on_back)
         self.add_widget(back_button)
 
-        self.balance_label = GLabel(font_size=dp(30), color=GOLD, halign="right", valign="middle")
+        self.balance_label = GLabel(
+            font_size=dp(30), color=GOLD, halign="right", valign="middle"
+        )
         self.balance_label.bind(size=self.update_text_size)
         self.add_widget(self.balance_label)
 
