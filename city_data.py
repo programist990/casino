@@ -5,6 +5,7 @@ Buildings pay a small income that piles up while the player is away (up to CAP_H
 landmarks are big one-time goals that boost all income.
 """
 
+import random
 import time
 
 PLOT_COUNT = 12
@@ -85,6 +86,69 @@ RANKS = [
     (50, "Мегаполис"),
     (80, "Столица Вегаса"),
 ]
+
+
+# ----- map geometry -----
+# All numbers are in dp. The origin is the centre of the map, y goes up.
+# The casino stands in the middle, the plots are around it: the first 8 are close
+# (cheap to reach), the last 4 are on the far edges, so the player has to scroll for them.
+
+MAP_W = 1200
+MAP_H = 1200
+CASINO_W = 240
+CASINO_H = 200
+PLOT_SIZE = 110
+PLOT_OFFSETS = [
+    (0, 210), (225, 0), (0, -210), (-225, 0),
+    (225, 210), (225, -210), (-225, -210), (-225, 210),
+    (0, 400), (430, 0), (0, -400), (-430, 0),
+]
+ROAD_WIDTH = 26
+ROAD_X = [-112, 112]  # vertical roads
+ROAD_Y = [-105, 105]  # horizontal roads
+assert len(PLOT_OFFSETS) == PLOT_COUNT
+
+
+def clamp_offset(offset, view, world):
+    """Where the map's lower edge may be on one axis, so the player never scrolls past the map.
+
+    If the map is smaller than the screen it just stays centred.
+    """
+    if view >= world:
+        return (view - world) / 2
+    return max(view - world, min(0, offset))
+
+
+def centered_offset(view, world):
+    return (view - world) / 2
+
+
+def tree_spots(count=90, seed=7):
+    """Fixed random trees (x, y, radius), never on roads, plots or the casino square."""
+    rng = random.Random(seed)
+    half_w = MAP_W / 2
+    half_h = MAP_H / 2
+    keep_out = [(0, 0, CASINO_W / 2 + 40, CASINO_H / 2 + 40)]
+    for dx, dy in PLOT_OFFSETS:
+        keep_out.append((dx, dy, PLOT_SIZE / 2 + 14, PLOT_SIZE / 2 + 14))
+
+    spots = []
+    attempts = 0
+    while len(spots) < count and attempts < count * 60:
+        attempts += 1
+        radius = rng.uniform(9, 17)
+        x = rng.uniform(-half_w + radius, half_w - radius)
+        y = rng.uniform(-half_h + radius, half_h - radius)
+        if any(abs(x - road) < ROAD_WIDTH / 2 + radius + 4 for road in ROAD_X):
+            continue
+        if any(abs(y - road) < ROAD_WIDTH / 2 + radius + 4 for road in ROAD_Y):
+            continue
+        if any(abs(x - cx) < hw + radius and abs(y - cy) < hh + radius for cx, cy, hw, hh in keep_out):
+            continue
+        if any((x - tx) ** 2 + (y - ty) ** 2 < (radius + tr) ** 2 for tx, ty, tr in spots):
+            continue
+        spots.append((x, y, radius))
+    return spots
 
 
 # ----- save data -----
