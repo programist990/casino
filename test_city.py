@@ -1,5 +1,5 @@
 import sys, types, json, os, tempfile
-sys.path.insert(0, "/home/claude/proj/casino_origin")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # stub kivy so common.py (Wallet) can be imported without a display
 class Any:
@@ -27,7 +27,8 @@ from common import Wallet
 
 d = tempfile.mkdtemp(); path = os.path.join(d, "save.json")
 w = Wallet(path)
-assert w.balance == 1000 and w.city["plots"] == [None]*12
+w.balance = 1000  # the game may start with more (test money): the rules below need exactly the reserve
+assert w.city["plots"] == [None]*12
 
 # reserve rule: cannot spend the last 1000
 assert cd.buy_building(w, 0, "diner") == "reserve" and w.balance == 1000
@@ -37,26 +38,26 @@ assert cd.buy_building(w, 0, "motel", now=1000.0) == "occupied"
 assert cd.buy_building(w, 1, "diner", now=1000.0) == "reserve"   # balance 1000, would drop below reserve
 
 # income piles up: diner lvl1 = 25/h
-assert cd.income_per_hour(w.city) == 25
-assert abs(cd.pending(w.city, 1000.0 + 3600) - 25) < 1e-9
+assert cd.income_per_second(w.city) == 2          # a diner earns 2 chips every second
+assert abs(cd.pending(w.city, 1000.0 + 10) - 20) < 1e-9
 # cap at 8h
-assert abs(cd.pending(w.city, 1000.0 + 3600*100) - 200) < 1e-9
+assert abs(cd.pending(w.city, 1000.0 + 3600*100) - 2*3600*8) < 1e-9
 # clock moved back -> no negative / no change
 assert cd.pending(w.city, 500.0) == 0
 
 # upgrade settles the old rate first, then uses the new one
 w.balance = 5000
-assert cd.upgrade_building(w, 0, now=1000.0 + 3600) == "ok"   # cost 1000*2^1 = 2000
+assert cd.upgrade_building(w, 0, now=1000.0 + 60) == "ok"     # cost 1000*2^1 = 2000
 assert w.balance == 3000 and w.city["plots"][0]["level"] == 2
-assert abs(w.city["stored"] - 25) < 1e-9
-assert cd.income_per_hour(w.city) == 50
-assert abs(cd.pending(w.city, 1000.0 + 7200) - 75) < 1e-9     # 25 settled + 1h * 50
+assert abs(w.city["stored"] - 120) < 1e-9                       # 60 s * 2
+assert cd.income_per_second(w.city) == 4
+assert abs(cd.pending(w.city, 1000.0 + 120) - 360) < 1e-9       # 120 settled + 60 s * 4
 
 # collect keeps the fraction and pays out an int
 before = w.balance
-got = cd.collect(w, now=1000.0 + 7200 + 1800)                   # 25 + 50 + 25 = 100
-assert got == 100 and w.balance == before + 100
-assert cd.collect(w, now=1000.0 + 7200 + 1800) == 0
+got = cd.collect(w, now=1000.0 + 120 + 30)                      # 120 + 60*4 + 30*4 = 480
+assert got == 480 and w.balance == before + 480
+assert cd.collect(w, now=1000.0 + 120 + 30) == 0
 
 # max level
 for _ in range(10):
@@ -69,14 +70,14 @@ assert r == "max" and w.city["plots"][0]["level"] == 5
 w.balance = 10**9
 assert cd.buy_landmark(w, "fountain", now=6000.0) == "ok"
 assert cd.buy_landmark(w, "fountain", now=6000.0) == "owned"
-assert cd.income_per_hour(w.city) == 25*5*1.1
+assert abs(cd.income_per_second(w.city) - 2*5*1.1) < 1e-9
 assert cd.buy_landmark(w, "nope") == "unknown"
 
 # the exploit is closed: spending everything and getting refilled is impossible
-w2 = Wallet(os.path.join(d, "x.json")); w2.balance = 1000
+w2 = Wallet(os.path.join(d, "x.json")); w2.balance = cd.CITY_RESERVE
 for t in cd.BUILDING_ORDER:
     assert cd.buy_building(w2, 0, t) == "reserve"
-assert w2.balance == 1000
+assert w2.balance == cd.CITY_RESERVE
 
 # save -> load round trip
 w.save()
@@ -96,3 +97,27 @@ assert c["landmarks"] == ["fountain"] and c["stored"] == 0.0 and len(c["plots"])
 assert cd.rank_name(cd.new_city()) == "Пустырь"
 print("all city tests passed; max-level total costs:",
       {t: sum(cd.upgrade_cost(t, l) for l in range(5)) for t in cd.BUILDING_ORDER})
+
+# ---- map geometry: the picture and the game agree ----
+import math
+spots = cd.decor_spots()
+assert len(spots) > 150 and all(k in cd.DECOR_SIZE for k, _, _ in spots)
+assert cd.decor_spots() == spots                                  # same map every time
+for kind, x, y in spots:
+    assert abs(x) < 600 and abs(y) < 600
+    assert not (kind in ("cactus", "barrel", "rock", "dry", "round", "pine", "pink", "bush")
+                and cd.in_polygon(x, y, cd.LAKE))               # nothing grows in the lake
+    for dx, dy in cd.PLOT_OFFSETS:                                # nothing stands on a building plot
+        if kind in ("round", "pine", "pink", "bush", "cactus", "barrel", "rock", "dry"):
+            assert not cd.in_rect(x, y, (dx, dy, cd.PLOT_SIZE, cd.PLOT_SIZE))
+for kind, x, y in cd.decor_spots():
+    if kind in ("round", "pine", "pink", "bush", "cactus", "barrel", "rock", "dry"):
+        assert cd.road_clearance(x, y) > 0                        # trees never grow on a road
+route = cd.Route(cd.car_route(1))
+x0, y0, _ = route.at(0)
+x1, y1, _ = route.at(route.total)
+assert abs(x0 - x1) < 1e-6 and abs(y0 - y1) < 1e-6              # the route is a closed loop
+for d_ in range(0, int(route.total), 25):
+    x, y, _ = route.at(d_)
+    assert cd.path_distance(x, y, cd.RING, True) < cd.RING_WIDTH / 2   # cars stay on the road
+print("geometry tests passed;", len(spots), "things on the map")

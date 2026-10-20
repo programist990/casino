@@ -235,7 +235,8 @@ class CardView(BoxLayout):
         self.back.size = self.size
         # thin outlines look broken while the card is squeezed during a flip
         if width >= 28:
-            self.edge_color.a = 0.28
+            # the card-back picture has its own border and round corners: no outline on it
+            self.edge_color.a = 0 if (self.hidden and CARD_BACK) else 0.28
             self.frame_color.a = self.frame_target
             self.edge.rounded_rectangle = (x, y, width, height, 12)
             self.frame.rounded_rectangle = (x + 5, y + 5, width - 10, height - 10, 8)
@@ -245,13 +246,15 @@ class CardView(BoxLayout):
 
     def show_side(self):
         if self.hidden:
-            self.face_color.rgba = (0.15, 0.3, 0.7, 1)
             self.rank_label.text = ""
             self.frame_target = 0
             if CARD_BACK:
+                # no base colour under the picture, or it shows at the rounded corners (blue)
+                self.face_color.rgba = (1, 1, 1, 0)
                 self.back_color.a = 1
                 self.suit_label.text = ""
             else:
+                self.face_color.rgba = (0.15, 0.3, 0.7, 1)
                 self.back_color.a = 0
                 self.suit_label.text = "♦"
                 self.suit_label.color = (0.55, 0.7, 1, 1)
@@ -547,9 +550,10 @@ class BetStack(Widget):
             font_size=dp(18),
             color=GOLD,
             size_hint=(None, None),
-            size=(70, 26),
+            size=(dp(110), dp(30)),
             halign="right",
             valign="middle",
+            max_lines=1,
         )
         self.label.text_size = self.label.size
         self.add_widget(self.label)
@@ -574,7 +578,11 @@ class BetStack(Widget):
     def set_bet(self, amount, count, source, animate=True):
         self.count = count
         self.source = source
-        self.label.text = str(amount)
+        text = str(amount)
+        # long numbers get a smaller font instead of wrapping to a second line
+        size = 18 if len(text) <= 4 else 16 if len(text) == 5 else 14 if len(text) == 6 else 12
+        self.label.font_size = dp(size)
+        self.label.text = text
         self.redraw()
         if animate:
             Animation.cancel_all(self, "lift")
