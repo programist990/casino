@@ -1,9 +1,12 @@
+import os
+
 from kivy.animation import Animation
 from kivy.clock import Clock
+from kivy.core.image import Image as CoreImage
 from kivy.core.window import Window
 from kivy.graphics import (
+    BorderImage,
     Color,
-    Ellipse,
     InstructionGroup,
     Line,
     PopMatrix,
@@ -11,13 +14,13 @@ from kivy.graphics import (
     Rectangle,
     RoundedRectangle,
     Translate,
-    Triangle,
 )
 from kivy.metrics import dp
 from kivy.properties import NumericProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.image import Image
 from kivy.uix.modalview import ModalView
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.screenmanager import Screen
@@ -26,6 +29,8 @@ from kivy.uix.widget import Widget
 
 import city_data as rules
 from common import (
+    BASE_DIR,
+    CHIP_IMAGE,
     FONT_SUITS,
     GOLD,
     GRAY,
@@ -33,32 +38,69 @@ from common import (
     SOFT_RED,
     WHITE,
     GLabel,
-    MessageLabel,
     RoundButton,
     Sfx,
-    TopBar,
     float_text,
     go_to,
     pulse,
 )
 
-DIM = (1, 1, 1, 0.3)
 TEXT = (0.85, 0.88, 0.92, 0.95)
+GOLD_BUTTON = (0.96, 0.72, 0.12, 1)
+DARK_TEXT = (0.25, 0.14, 0.02, 1)
 TAP_SLOP = dp(10)  # a finger moving less than this is a tap, not a drag
+
+# the top and bottom panels float over the map
+TOP_PANEL = 112
+BOTTOM_PANEL = 190
+
+
+# ----- pictures (made by make_city_assets.py) -----
+
+
+def art(name):
+    return os.path.join(BASE_DIR, "assets", "city", name)
+
+
+def building_art(type_id):
+    return art(f"{type_id}.png")
+
+
+def landmark_art(landmark_id):
+    return art(f"lm_{landmark_id}.png")
 
 
 def fmt(amount):
     return f"{int(amount):,}".replace(",", " ")
 
 
-def shade(color, factor):
-    return (min(1, color[0] * factor), min(1, color[1] * factor), min(1, color[2] * factor), 1)
-
-
 def fit_label(label):
     """Makes a label wrap/shorten inside its own box."""
     label.bind(size=lambda inst, size: setattr(inst, "text_size", size))
     return label
+
+
+def nine_border(width, height, border=34):
+    """Corner size for a stretchable picture, never bigger than the widget allows."""
+    b = max(1, min(border, height * 0.45, width * 0.45))
+    return (b, b, b, b)
+
+
+def add_plate(widget, source, tint=(1, 1, 1, 1), inset=(0, 0, 0, 0), border=34):
+    """Draws a stretchable picture (panel, card...) behind a widget and keeps it in place."""
+    with widget.canvas.before:
+        Color(*tint)
+        plate = BorderImage(source=source, border=(border,) * 4)
+
+    def update(*args):
+        left, bottom, right, top = inset
+        plate.pos = (widget.x + left, widget.y + bottom)
+        plate.size = (max(1, widget.width - left - right), max(1, widget.height - bottom - top))
+        plate.border = nine_border(plate.size[0], plate.size[1], border)
+
+    widget.bind(pos=update, size=update)
+    update()
+    return plate
 
 
 class Tappable:
@@ -81,11 +123,108 @@ class Tappable:
         return super().on_touch_up(touch)
 
 
-# ----- things standing on the map (seen from above) -----
+# ----- buttons -----
+
+
+class CityButton(RoundButton):
+    """Soft glossy button made from a picture. btn_color tints it; it sinks when pressed."""
+
+    def __init__(self, btn_color=GREEN, **kwargs):
+        self._ready = False
+        self._btn_color = btn_color
+        super().__init__(btn_color=btn_color, **kwargs)
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(0, 0, 0, 0.4)
+            self.shadow = BorderImage(source=art("btn.png"), border=(34,) * 4)
+            self.tint = Color(*btn_color)
+            self.body = BorderImage(source=art("btn.png"), border=(34,) * 4)
+        self._ready = True
+        self.update_bg()
+
+    @property
+    def btn_color(self):
+        return self._btn_color
+
+    @btn_color.setter
+    def btn_color(self, value):
+        self._btn_color = value
+        self.update_bg()
+
+    def update_bg(self, *args):
+        if not getattr(self, "_ready", False):
+            return
+        x, y = self.pos
+        w, h = self.size
+        lift = dp(3)
+        down = self.state == "down"
+        top_gap = dp(1) if down else lift
+        border = nine_border(w, h - lift)
+        self.shadow.pos = (x, y)
+        self.shadow.size = (w, max(1, h - lift))
+        self.shadow.border = border
+        self.body.pos = (x, y + (dp(1) if down else lift))
+        self.body.size = (w, max(1, h - top_gap))
+        self.body.border = border
+
+        red, green, blue, alpha = self.btn_color
+        if self.disabled:
+            factor = 0.45
+        elif down:
+            factor = 0.78
+        else:
+            factor = 1.0
+        self.tint.rgba = (red * factor, green * factor, blue * factor, alpha)
+
+
+class PriceButton(CityButton):
+    """A button with a chip picture and a price on it."""
+
+    def __init__(self, price, chip=True, **kwargs):
+        super().__init__(**kwargs)
+        self.text = ""
+        self.row = BoxLayout(spacing=dp(4), padding=(dp(8), dp(4), dp(8), dp(8)))
+        if chip:
+            self.row.add_widget(Image(source=CHIP_IMAGE, size_hint_x=None, width=dp(22)))
+        self.price_label = GLabel(
+            text=price,
+            font_size=dp(17) if len(price) <= 8 else dp(14),
+            color=self.color,
+            halign="center",
+            valign="middle",
+        )
+        self.row.add_widget(self.price_label)
+        self.add_widget(self.row)
+        self.bind(pos=self.place_row, size=self.place_row)
+        self.place_row()
+
+    def place_row(self, *args):
+        self.row.pos = self.pos
+        self.row.size = self.size
+
+
+# ----- things standing on the map -----
+
+
+class Plate(GLabel):
+    """A small label on a dark rounded plate (building name, level stars)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            Color(0, 0, 0, 0.62)
+            self.plate = RoundedRectangle(radius=[dp(8)])
+        self.bind(pos=self.update_plate, size=self.update_plate)
+        self.update_plate()
+
+    def update_plate(self, *args):
+        self.plate.pos = self.pos
+        self.plate.size = self.size
+        self.text_size = self.size
 
 
 class MapPlot(FloatLayout):
-    """One plot of land: a "+" when empty, or a building drawn from above.
+    """One plot of land: a golden "+" when empty, or a building picture on a paved lot.
 
     Taps are not handled here: MapView decides if a touch was a tap or a drag.
     """
@@ -96,173 +235,80 @@ class MapPlot(FloatLayout):
         super().__init__(**kwargs)
         self.index = index
         self.plot = None
-        self.art = InstructionGroup()
-        self.canvas.add(self.art)
 
-        self.plus = GLabel(
-            text="+",
-            font_size=dp(46),
-            color=(1, 0.9, 0.5, 0.9),
+        self.sprite = Image(
+            source=art("plot_empty.png"),
+            fit_mode="fill",
+            size_hint=(1, 1),
             pos_hint={"center_x": 0.5, "center_y": 0.5},
-            size_hint=(1, 0.5),
         )
-        self.add_widget(self.plus)
+        self.add_widget(self.sprite)
 
-        self.name_label = fit_label(
-            GLabel(
-                font_size=dp(13),
-                halign="center",
-                valign="middle",
-                shorten=True,
-                pos_hint={"x": 0, "y": 0.02},
-                size_hint=(1, 0.22),
-            )
+        self.name_label = Plate(
+            font_size=dp(12),
+            halign="center",
+            valign="middle",
+            shorten=True,
+            size_hint=(0.86, 0.17),
+            pos_hint={"center_x": 0.5, "y": 0.05},
         )
         self.add_widget(self.name_label)
 
-        self.level_label = fit_label(
-            GLabel(
-                font_size=dp(13),
-                color=GOLD,
-                halign="right",
-                valign="middle",
-                pos_hint={"right": 0.95, "top": 0.99},
-                size_hint=(0.6, 0.2),
-            )
+        self.stars_label = Plate(
+            font_name=FONT_SUITS,
+            font_size=dp(11),
+            color=GOLD,
+            halign="center",
+            valign="middle",
+            size_hint=(0.52, 0.15),
+            pos_hint={"center_x": 0.5, "top": 0.97},
         )
-        self.add_widget(self.level_label)
+        self.add_widget(self.stars_label)
 
-        self.bind(pos=self.redraw, size=self.redraw)
+        # golden frame for a building at the maximum level
+        self.frame = InstructionGroup()
+        self.canvas.after.add(self.frame)
+        self.bind(pos=self.redraw_frame, size=self.redraw_frame)
+        self.set_plot(None)
 
     def set_plot(self, plot):
         self.plot = plot
         if plot is None:
-            self.plus.opacity = 1
-            self.name_label.text = ""
-            self.level_label.text = ""
+            self.sprite.source = art("plot_empty.png")
+            self.name_label.opacity = 0
+            self.stars_label.opacity = 0
         else:
-            self.plus.opacity = 0
+            self.sprite.source = building_art(plot["type"])
             self.name_label.text = rules.BUILDINGS[plot["type"]]["name"]
             self.name_label.color = WHITE
-            self.level_label.text = f"Ур. {plot['level']}"
-        self.redraw()
+            self.name_label.opacity = 1
+            self.stars_label.text = "★" * plot["level"]
+            self.stars_label.opacity = 1
+        self.redraw_frame()
 
-    def redraw(self, *args):
-        self.art.clear()
-        x, y = self.pos
-        w, h = self.size
-        if w < 10 or h < 10:
-            return
-
-        if self.plot is None:
-            # a free plot: soft patch, dashed gold outline and a "+" button
-            self.art.add(Color(0.02, 0.07, 0.06, 0.45))
-            self.art.add(RoundedRectangle(pos=self.pos, size=self.size, radius=[14]))
-            self.art.add(Color(1, 0.82, 0.25, 0.6))
-            self.art.add(
+    def redraw_frame(self, *args):
+        self.frame.clear()
+        if self.plot is not None and self.plot["level"] >= rules.MAX_LEVEL:
+            self.frame.add(Color(*GOLD[:3], 0.95))
+            self.frame.add(
                 Line(
-                    rounded_rectangle=(x + 2, y + 2, w - 4, h - 4, 14),
-                    width=1.3,
-                    dash_length=7,
-                    dash_offset=5,
+                    rounded_rectangle=(
+                        self.x + 2, self.y + 2, self.width - 4, self.height - 4, dp(20)
+                    ),
+                    width=dp(1.6),
                 )
             )
-            r = w * 0.24
-            self.art.add(Color(1, 0.82, 0.25, 0.2))
-            self.art.add(Ellipse(pos=(x + w / 2 - r, y + h / 2 - r), size=(2 * r, 2 * r)))
-            self.art.add(Color(1, 0.82, 0.25, 0.7))
-            self.art.add(Line(circle=(x + w / 2, y + h / 2, r), width=1.4))
-            return
 
-        spec = rules.BUILDINGS[self.plot["type"]]
-        level = self.plot["level"]
-        color = spec["color"]
-        dark = shade(color, 0.55)
-
-        # concrete pad the building stands on
-        self.art.add(Color(0.13, 0.15, 0.17, 1))
-        self.art.add(RoundedRectangle(pos=self.pos, size=self.size, radius=[14]))
-        self.art.add(Color(1, 1, 1, 0.12))
-        self.art.add(Line(rounded_rectangle=(x + 1, y + 1, w - 2, h - 2, 14), width=1))
-
-        side = w * 0.78 * spec["width"]
-        cx = x + w / 2
-        cy = y + h * 0.6
-        bx = cx - side / 2
-        by = cy - side / 2
-        shape = spec["shape"]
-        offset = dp(5)
-
-        # shadow: the roof "stands" above the ground
-        self.art.add(Color(0, 0, 0, 0.4))
-        if shape == "dome":
-            self.art.add(Ellipse(pos=(bx + offset, by - offset), size=(side, side)))
-        else:
-            self.art.add(Rectangle(pos=(bx + offset, by - offset), size=(side, side)))
-
-        if shape == "peak":
-            # gable roof: two slopes, one lit and one in shade, ridge between them
-            half = side / 2
-            self.art.add(Color(*color))
-            self.art.add(Rectangle(pos=(bx, by), size=(half, side)))
-            self.art.add(Color(*shade(color, 0.7)))
-            self.art.add(Rectangle(pos=(bx + half, by), size=(half, side)))
-            self.art.add(Color(1, 1, 1, 0.45))
-            self.art.add(Line(points=[cx, by + dp(2), cx, by + side - dp(2)], width=1.3))
-        elif shape == "flat":
-            # flat roof with air conditioners and a small pool
-            self.art.add(Color(*shade(color, 0.75)))
-            self.art.add(Rectangle(pos=(bx, by), size=(side, side)))
-            self.art.add(Color(*color))
-            self.art.add(
-                Rectangle(pos=(bx + dp(4), by + dp(4)), size=(side - dp(8), side - dp(8)))
-            )
-            unit = side * 0.16
-            self.art.add(Color(*dark))
-            self.art.add(Rectangle(pos=(bx + side * 0.12, by + side * 0.66), size=(unit, unit)))
-            self.art.add(Rectangle(pos=(bx + side * 0.36, by + side * 0.66), size=(unit, unit)))
-            self.art.add(Color(0.55, 0.85, 1, 0.95))
-            self.art.add(
-                RoundedRectangle(
-                    pos=(bx + side * 0.12, by + side * 0.14),
-                    size=(side * 0.46, side * 0.28),
-                    radius=[4],
-                )
-            )
-        elif shape == "spire":
-            # tower: stepped square roof with a cross in the middle
-            self.art.add(Color(*dark))
-            self.art.add(Rectangle(pos=(bx, by), size=(side, side)))
-            inner = side * 0.74
-            self.art.add(Color(*color))
-            self.art.add(Rectangle(pos=(cx - inner / 2, cy - inner / 2), size=(inner, inner)))
-            core = side * 0.36
-            self.art.add(Color(*shade(color, 1.3)))
-            self.art.add(Rectangle(pos=(cx - core / 2, cy - core / 2), size=(core, core)))
-            self.art.add(Color(1, 1, 1, 0.5))
-            self.art.add(Line(points=[cx - core / 2, cy, cx + core / 2, cy], width=1.2))
-            self.art.add(Line(points=[cx, cy - core / 2, cx, cy + core / 2], width=1.2))
-        else:
-            # dome: concentric circles
-            self.art.add(Color(*dark))
-            self.art.add(Ellipse(pos=(bx, by), size=(side, side)))
-            inner = side * 0.78
-            self.art.add(Color(*color))
-            self.art.add(Ellipse(pos=(cx - inner / 2, cy - inner / 2), size=(inner, inner)))
-            core = side * 0.34
-            self.art.add(Color(*shade(color, 1.3)))
-            self.art.add(Ellipse(pos=(cx - core / 2, cy - core / 2), size=(core, core)))
-            self.art.add(Color(1, 1, 1, 0.4))
-            self.art.add(Line(circle=(cx, cy, inner / 2), width=1.1))
-
-        # the maximum level gets a golden frame
-        if level >= rules.MAX_LEVEL:
-            self.art.add(Color(*GOLD[:3], 0.9))
-            self.art.add(Line(rounded_rectangle=(x + 1, y + 1, w - 2, h - 2, 14), width=1.6))
+    def pop(self, big=True):
+        """The picture bounces when something was built or upgraded here."""
+        Animation.cancel_all(self.sprite, "size_hint")
+        start = 0.45 if big else 0.86
+        self.sprite.size_hint = (start, start)
+        Animation(size_hint=(1, 1), duration=0.5 if big else 0.35, t="out_back").start(self.sprite)
 
 
 class CasinoBuilding(FloatLayout):
-    """The casino in the middle of the map, seen from above. A tap opens the casino menu."""
+    """The casino in the middle of the map. A tap opens the casino menu."""
 
     glow = NumericProperty(0.25)
 
@@ -270,37 +316,35 @@ class CasinoBuilding(FloatLayout):
         kwargs.setdefault("size_hint", (None, None))
         kwargs.setdefault("size", (dp(rules.CASINO_W), dp(rules.CASINO_H)))
         super().__init__(**kwargs)
-        self.art = InstructionGroup()
-        self.canvas.add(self.art)
-        self.glow_color = None
 
-        self.spade = GLabel(
-            text="♠",
-            font_name=FONT_SUITS,
-            font_size=dp(46),
-            color=(0.35, 0.05, 0.1, 1),
-            pos_hint={"center_x": 0.5, "center_y": 0.58},
-            size_hint=(1, 0.4),
+        # a golden outline around the plaza that slowly pulses
+        self.glow_group = InstructionGroup()
+        self.glow_color = Color(1, 0.82, 0.25, self.glow)
+        self.glow_line = Line(rounded_rectangle=(0, 0, 10, 10, 20), width=dp(2.6))
+        self.glow_group.add(self.glow_color)
+        self.glow_group.add(self.glow_line)
+        self.canvas.before.add(self.glow_group)
+
+        self.sprite = Image(
+            source=art("casino.png"),
+            fit_mode="fill",
+            size_hint=(1, 1),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
         )
-        self.add_widget(self.spade)
+        self.add_widget(self.sprite)
+        self.bind(pos=self.update_glow, size=self.update_glow)
+        self.update_glow()
 
-        self.sign = GLabel(
-            text="КАЗИНО",
-            font_size=dp(27),
-            color=GOLD,
-            outline_width=2,
-            outline_color=(0.25, 0.02, 0.05, 1),
-            pos_hint={"center_x": 0.5, "y": 0.06},
-            size_hint=(1, 0.22),
+    def update_glow(self, *args):
+        grow = dp(4)
+        self.glow_line.rounded_rectangle = (
+            self.x - grow, self.y - grow, self.width + 2 * grow, self.height + 2 * grow, dp(30)
         )
-        self.add_widget(self.sign)
-
-        self.bind(pos=self.redraw, size=self.redraw)
 
     def start_glow(self):
         self.stop_glow()
-        anim = Animation(glow=0.85, duration=0.9, t="in_out_sine") + Animation(
-            glow=0.25, duration=0.9, t="in_out_sine"
+        anim = Animation(glow=0.9, duration=0.9, t="in_out_sine") + Animation(
+            glow=0.2, duration=0.9, t="in_out_sine"
         )
         anim.repeat = True
         anim.start(self)
@@ -309,71 +353,7 @@ class CasinoBuilding(FloatLayout):
         Animation.cancel_all(self, "glow")
 
     def on_glow(self, instance, value):
-        if self.glow_color is not None:
-            self.glow_color.a = value
-
-    def redraw(self, *args):
-        self.art.clear()
-        x, y = self.pos
-        w, h = self.size
-        if w < 10 or h < 10:
-            return
-        cx = x + w / 2
-        cy = y + h * 0.58
-
-        # stone square around the building
-        pad = dp(26)
-        self.art.add(Color(0.2, 0.22, 0.26, 1))
-        self.art.add(
-            RoundedRectangle(pos=(x - pad, y - pad), size=(w + 2 * pad, h + 2 * pad), radius=[28])
-        )
-        self.art.add(Color(1, 1, 1, 0.1))
-        self.art.add(
-            Line(rounded_rectangle=(x - pad, y - pad, w + 2 * pad, h + 2 * pad, 28), width=1.2)
-        )
-
-        # red carpet from the entrance
-        self.art.add(Color(0.8, 0.1, 0.18, 1))
-        self.art.add(Rectangle(pos=(cx - dp(20), y - pad), size=(dp(40), pad + dp(6))))
-        self.art.add(Color(1, 0.82, 0.25, 0.8))
-        self.art.add(Line(points=[cx - dp(20), y - pad, cx - dp(20), y + dp(6)], width=1))
-        self.art.add(Line(points=[cx + dp(20), y - pad, cx + dp(20), y + dp(6)], width=1))
-
-        # shadow and the building itself
-        self.art.add(Color(0, 0, 0, 0.4))
-        self.art.add(RoundedRectangle(pos=(x + dp(7), y - dp(7)), size=self.size, radius=[18]))
-        self.art.add(Color(0.45, 0.06, 0.12, 1))
-        self.art.add(RoundedRectangle(pos=self.pos, size=self.size, radius=[18]))
-
-        # gold roof edge and a darker roof inside it
-        self.art.add(Color(*GOLD))
-        self.art.add(RoundedRectangle(pos=(x + dp(6), y + dp(6)), size=(w - dp(12), h - dp(12)), radius=[14]))
-        self.art.add(Color(0.6, 0.08, 0.16, 1))
-        self.art.add(RoundedRectangle(pos=(x + dp(10), y + dp(10)), size=(w - dp(20), h - dp(20)), radius=[12]))
-
-        # four towers in the corners
-        tower = dp(26)
-        self.art.add(Color(*GOLD))
-        for tx in (x + dp(10), x + w - dp(10) - tower):
-            for ty in (y + dp(10), y + h - dp(10) - tower):
-                self.art.add(Rectangle(pos=(tx, ty), size=(tower, tower)))
-                self.art.add(Color(0.45, 0.06, 0.12, 1))
-                self.art.add(Rectangle(pos=(tx + dp(5), ty + dp(5)), size=(tower - dp(10), tower - dp(10))))
-                self.art.add(Color(*GOLD))
-
-        # dome in the middle
-        r = dp(44)
-        self.art.add(Color(0.3, 0.03, 0.08, 1))
-        self.art.add(Ellipse(pos=(cx - r - dp(3), cy - r - dp(3)), size=(2 * r + dp(6), 2 * r + dp(6))))
-        self.art.add(Color(*GOLD))
-        self.art.add(Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r)))
-        self.art.add(Color(1, 0.93, 0.6, 1))
-        self.art.add(Ellipse(pos=(cx - r * 0.78, cy - r * 0.78), size=(r * 1.56, r * 1.56)))
-
-        # neon outline that slowly pulses
-        self.glow_color = Color(1, 0.82, 0.25, self.glow)
-        self.art.add(self.glow_color)
-        self.art.add(Line(rounded_rectangle=(x - dp(3), y - dp(3), w + dp(6), h + dp(6), 20), width=2.4))
+        self.glow_color.a = value
 
 
 # ----- the map -----
@@ -403,44 +383,50 @@ class MapWorld(Widget):
         width = dp(rules.MAP_W)
         height = dp(rules.MAP_H)
 
-        Color(0.06, 0.27, 0.19, 1)
-        Rectangle(pos=(0, 0), size=(width, height))
-        # mowing stripes
-        Color(1, 1, 1, 0.035)
-        stripe = dp(100)
-        for i in range(0, int(width // stripe) + 1, 2):
-            Rectangle(pos=(i * stripe, 0), size=(stripe, height))
+        # grass: one small picture repeated over the whole map
+        grass = CoreImage(art("grass.png")).texture
+        grass.wrap = "repeat"
+        tile = dp(128)
+        Color(1, 1, 1, 1)
+        ground = Rectangle(texture=grass, pos=(0, 0), size=(width, height))
+        ground.tex_coords = (0, 0, width / tile, 0, width / tile, height / tile, 0, height / tile)
 
-        # stone square under the casino
-        cx, cy = self.to_map(0, 0)
-        half_w = dp(rules.CASINO_W / 2 + 26)
-        half_h = dp(rules.CASINO_H / 2 + 26)
-
-        # roads
+        # roads with a pavement on both sides, then the asphalt, then the dashed middle line
         road = dp(rules.ROAD_WIDTH)
-        Color(0.11, 0.12, 0.14, 1)
+        pave = dp(7)
+        Color(0.66, 0.63, 0.58, 1)
+        for rx in rules.ROAD_X:
+            Rectangle(pos=(self.to_map(rx, 0)[0] - road / 2 - pave, 0), size=(road + 2 * pave, height))
+        for ry in rules.ROAD_Y:
+            Rectangle(pos=(0, self.to_map(0, ry)[1] - road / 2 - pave), size=(width, road + 2 * pave))
+        Color(0.17, 0.18, 0.2, 1)
         for rx in rules.ROAD_X:
             Rectangle(pos=(self.to_map(rx, 0)[0] - road / 2, 0), size=(road, height))
         for ry in rules.ROAD_Y:
             Rectangle(pos=(0, self.to_map(0, ry)[1] - road / 2), size=(width, road))
-        Color(1, 1, 1, 0.3)
+        Color(1, 0.92, 0.55, 0.55)
         for rx in rules.ROAD_X:
             x = self.to_map(rx, 0)[0]
-            Line(points=[x, 0, x, height], width=1, dash_length=dp(10), dash_offset=dp(8))
+            Line(points=[x, 0, x, height], width=dp(1), dash_length=dp(10), dash_offset=dp(8))
         for ry in rules.ROAD_Y:
             y = self.to_map(0, ry)[1]
-            Line(points=[0, y, width, y], width=1, dash_length=dp(10), dash_offset=dp(8))
+            Line(points=[0, y, width, y], width=dp(1), dash_length=dp(10), dash_offset=dp(8))
 
-        # trees
-        for tx, ty, radius in rules.tree_spots():
+        # trees and bushes (the lower ones are drawn last, so they overlap the ones behind)
+        textures = {
+            "round": CoreImage(art("tree_round.png")).texture,
+            "pine": CoreImage(art("tree_pine.png")).texture,
+            "pink": CoreImage(art("tree_pink.png")).texture,
+            "bush": CoreImage(art("bush.png")).texture,
+        }
+        kinds = ["round", "pine", "pink"]
+        Color(1, 1, 1, 1)
+        spots = sorted(rules.tree_spots(), key=lambda spot: -spot[1])
+        for i, (tx, ty, radius) in enumerate(spots):
+            kind = "bush" if radius < 10.5 else kinds[i % 3]
+            size = dp(radius * (3.2 if kind == "bush" else 3.6))
             px, py = self.to_map(tx, ty)
-            r = dp(radius)
-            Color(0, 0, 0, 0.25)
-            Ellipse(pos=(px - r + dp(3), py - r - dp(3)), size=(2 * r, 2 * r))
-            Color(0.04, 0.2, 0.12, 1)
-            Ellipse(pos=(px - r, py - r), size=(2 * r, 2 * r))
-            Color(0.1, 0.38, 0.2, 1)
-            Ellipse(pos=(px - r * 0.65, py - r * 0.5), size=(r * 1.3, r * 1.3))
+            Rectangle(texture=textures[kind], pos=(px - size / 2, py - size * 0.2), size=(size, size))
 
         # edge of the map
         Color(0, 0, 0, 0.4)
@@ -545,41 +531,70 @@ class MapView(StencilView):
             self.on_casino()
 
 
-# ----- landmark strip -----
+# ----- top and bottom panels -----
+
+
+class CityTopBar(BoxLayout):
+    """Menu button and the chip balance on a dark pill. The balance counts up and down."""
+
+    shown = NumericProperty(0)
+
+    def __init__(self, on_back, **kwargs):
+        super().__init__(size_hint_y=None, height=dp(52), spacing=dp(10), **kwargs)
+        self.first_time = True
+
+        back = CityButton(text="МЕНЮ", btn_color=GRAY, size_hint_x=None, width=dp(104))
+        back.font_size = dp(19)
+        back.bind(on_release=on_back)
+        self.add_widget(back)
+
+        pill = BoxLayout(padding=(dp(14), dp(5), dp(10), dp(5)), spacing=dp(8))
+        add_plate(pill, art("card.png"))
+        self.balance_label = fit_label(
+            GLabel(font_size=dp(27), color=GOLD, halign="right", valign="middle")
+        )
+        pill.add_widget(self.balance_label)
+        pill.add_widget(Image(source=CHIP_IMAGE, size_hint_x=None, width=dp(34)))
+        self.add_widget(pill)
+
+    def set_balance(self, value):
+        if self.first_time:
+            self.first_time = False
+            self.shown = value
+            return
+        Animation.cancel_all(self, "shown")
+        Animation(shown=value, duration=0.6, t="out_quad").start(self)
+
+    def on_shown(self, instance, value):
+        self.balance_label.text = fmt(round(value))
 
 
 class LandmarkStrip(Tappable, BoxLayout):
-    """Row of landmark icons: golden when built, dim when not. Tap opens the list."""
+    """Row of landmark pictures: bright when built, faded when not. Tap opens the list."""
 
     def __init__(self, **kwargs):
         kwargs.setdefault("spacing", dp(6))
-        kwargs.setdefault("padding", (dp(8), dp(4)))
+        kwargs.setdefault("padding", (dp(10), dp(3)))
         super().__init__(**kwargs)
-        with self.canvas.before:
-            Color(0, 0, 0, 0.3)
-            self.plate = RoundedRectangle(radius=[14])
-        self.bind(pos=self.update_plate, size=self.update_plate)
+        add_plate(self, art("card.png"), border=30)
 
         self.icons = []
         for item in rules.LANDMARKS:
-            icon = GLabel(text=item["symbol"], font_name=FONT_SUITS, font_size=dp(28))
+            icon = Image(source=landmark_art(item["id"]), fit_mode="contain")
             self.icons.append(icon)
             self.add_widget(icon)
 
-    def update_plate(self, *args):
-        self.plate.pos = self.pos
-        self.plate.size = self.size
-
     def refresh(self, city):
         for item, icon in zip(rules.LANDMARKS, self.icons):
-            icon.color = GOLD if item["id"] in city["landmarks"] else DIM
+            built = item["id"] in city["landmarks"]
+            icon.color = (1, 1, 1, 1) if built else (0.5, 0.55, 0.65, 0.5)
 
 
 # ----- dialogs -----
 
 
 class Dialog(ModalView):
-    """Dark card with a title, a scrollable list of rows and a close button."""
+    """Dark glass card with a title, a scrollable list of rows and a close button."""
 
     def __init__(self, title, height, **kwargs):
         kwargs.setdefault("size_hint", (0.92, None))
@@ -588,27 +603,8 @@ class Dialog(ModalView):
         self.auto_dismiss = True
         self.background_color = (0, 0, 0, 0.72)
 
-        container = BoxLayout(
-            orientation="vertical", padding=(dp(14), dp(12)), spacing=dp(8)
-        )
-        with container.canvas.before:
-            Color(0.06, 0.10, 0.14, 0.98)
-            plate = RoundedRectangle(radius=[16])
-            Color(1, 0.82, 0.25, 0.5)
-            border = Line(rounded_rectangle=(0, 0, 0, 0, 16), width=1.2)
-
-        def update_plate(*args):
-            plate.pos = container.pos
-            plate.size = container.size
-            border.rounded_rectangle = (
-                container.x + 0.5,
-                container.y + 0.5,
-                max(1, container.width - 1),
-                max(1, container.height - 1),
-                16,
-            )
-
-        container.bind(pos=update_plate, size=update_plate)
+        container = BoxLayout(orientation="vertical", padding=(dp(16), dp(14)), spacing=dp(8))
+        add_plate(container, art("panel.png"), border=32)
 
         container.add_widget(
             fit_label(
@@ -624,15 +620,13 @@ class Dialog(ModalView):
             )
         )
 
-        self.rows = GridLayout(cols=1, spacing=dp(6), size_hint_y=None)
+        self.rows = GridLayout(cols=1, spacing=dp(8), size_hint_y=None)
         self.rows.bind(minimum_height=self.rows.setter("height"))
         scroll = ScrollView(do_scroll_x=False, bar_width=dp(3))
         scroll.add_widget(self.rows)
         container.add_widget(scroll)
 
-        close = RoundButton(
-            text="ЗАКРЫТЬ", btn_color=GRAY, size_hint_y=None, height=dp(46)
-        )
+        close = CityButton(text="ЗАКРЫТЬ", btn_color=GRAY, size_hint_y=None, height=dp(50))
         close.font_size = dp(18)
         close.bind(on_release=self.dismiss)
         container.add_widget(close)
@@ -653,6 +647,11 @@ class Dialog(ModalView):
         )
         self.rows.add_widget(label)
 
+    def add_picture(self, path, height):
+        self.rows.add_widget(
+            Image(source=path, fit_mode="contain", size_hint_y=None, height=height)
+        )
+
     def add_row(
         self,
         title,
@@ -662,19 +661,22 @@ class Dialog(ModalView):
         on_press,
         disabled=False,
         title_color=WHITE,
-        symbol=None,
-        symbol_color=GOLD,
+        image=None,
+        dim_image=False,
+        chip=True,
     ):
-        row = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(8))
-        if symbol:
+        row = BoxLayout(
+            size_hint_y=None, height=dp(72), spacing=dp(8), padding=(dp(8), dp(6), dp(8), dp(6))
+        )
+        add_plate(row, art("card.png"), border=28)
+        if image:
             row.add_widget(
-                GLabel(
-                    text=symbol,
-                    font_name=FONT_SUITS,
-                    font_size=dp(28),
-                    color=symbol_color,
+                Image(
+                    source=image,
+                    fit_mode="contain",
                     size_hint_x=None,
-                    width=dp(36),
+                    width=dp(56),
+                    color=(0.5, 0.55, 0.65, 0.55) if dim_image else (1, 1, 1, 1),
                 )
             )
         texts = BoxLayout(orientation="vertical")
@@ -694,7 +696,7 @@ class Dialog(ModalView):
             fit_label(
                 GLabel(
                     text=subtitle,
-                    font_size=dp(12),
+                    font_size=dp(11),
                     color=TEXT,
                     halign="left",
                     valign="middle",
@@ -703,34 +705,22 @@ class Dialog(ModalView):
             )
         )
         row.add_widget(texts)
-        button = RoundButton(
-            text=button_text,
+        button = PriceButton(
+            button_text,
+            chip=chip,
             btn_color=button_color,
             size_hint_x=None,
-            width=dp(118),
+            width=dp(122),
             disabled=disabled,
         )
-        button.font_size = dp(17)
+        if button_color == GOLD_BUTTON:
+            button.price_label.color = DARK_TEXT
         button.bind(on_release=on_press)
         row.add_widget(button)
         self.rows.add_widget(row)
 
 
 # ----- the screen -----
-
-
-def hud_plate(widget, alpha=0.55):
-    """Dark see-through plate behind a block of buttons, so it reads on top of the map."""
-    with widget.canvas.before:
-        Color(0, 0, 0, alpha)
-        plate = RoundedRectangle(radius=[0, 0, 18, 18])
-
-    def update(*args):
-        plate.pos = widget.pos
-        plate.size = widget.size
-
-    widget.bind(pos=update, size=update)
-    return plate
 
 
 class CityScreen(Screen):
@@ -745,17 +735,17 @@ class CityScreen(Screen):
         self.map = MapView(self.on_plot, self.on_casino, size_hint=(1, 1))
         root.add_widget(self.map)
 
-        # top: back button, balance, city rank
+        # top panel: menu button, balance, city rank
         top = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
-            height=dp(106),
+            height=dp(TOP_PANEL),
             pos_hint={"top": 1},
-            padding=(dp(12), dp(8), dp(12), dp(4)),
+            padding=(dp(18), dp(16), dp(18), dp(10)),
             spacing=dp(4),
         )
-        hud_plate(top)
-        self.top_bar = TopBar(self.go_menu)
+        add_plate(top, art("panel.png"), tint=(1, 1, 1, 0.94), inset=(dp(6), dp(2), dp(6), dp(6)), border=32)
+        self.top_bar = CityTopBar(self.go_menu)
         top.add_widget(self.top_bar)
         self.info_label = fit_label(
             GLabel(
@@ -764,43 +754,42 @@ class CityScreen(Screen):
                 halign="center",
                 valign="middle",
                 size_hint_y=None,
-                height=dp(26),
+                height=dp(24),
             )
         )
         top.add_widget(self.info_label)
         root.add_widget(top)
 
-        # bottom: message, landmarks, collect button
+        # bottom panel: message, landmarks, collect button
         bottom = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
-            height=dp(176),
+            height=dp(BOTTOM_PANEL),
             pos_hint={"y": 0},
-            padding=(dp(12), dp(8), dp(12), dp(10)),
+            padding=(dp(18), dp(12), dp(18), dp(16)),
             spacing=dp(6),
         )
-        with bottom.canvas.before:
-            Color(0, 0, 0, 0.55)
-            bottom_plate = RoundedRectangle(radius=[18, 18, 0, 0])
+        add_plate(bottom, art("panel.png"), tint=(1, 1, 1, 0.94), inset=(dp(6), dp(6), dp(6), dp(2)), border=32)
 
-        def update_bottom(*args):
-            bottom_plate.pos = bottom.pos
-            bottom_plate.size = bottom.size
-
-        bottom.bind(pos=update_bottom, size=update_bottom)
-
-        self.message_label = MessageLabel(size_hint_y=None, height=dp(44))
-        self.message_label.font_size = dp(17)
+        self.message_label = fit_label(
+            GLabel(
+                font_size=dp(15),
+                halign="center",
+                valign="middle",
+                size_hint_y=None,
+                height=dp(42),
+            )
+        )
         bottom.add_widget(self.message_label)
 
-        self.strip = LandmarkStrip(size_hint_y=None, height=dp(44))
+        self.strip = LandmarkStrip(size_hint_y=None, height=dp(48))
         self.strip.callback = self.open_landmarks
         bottom.add_widget(self.strip)
 
-        self.collect_button = RoundButton(
-            text="СОБРАТЬ", btn_color=GREEN, size_hint_y=None, height=dp(58)
+        self.collect_button = CityButton(
+            text="СОБРАТЬ", btn_color=GREEN, size_hint_y=None, height=dp(60)
         )
-        self.collect_button.font_size = dp(26)
+        self.collect_button.font_size = dp(25)
         self.collect_button.bind(on_release=self.collect)
         bottom.add_widget(self.collect_button)
         root.add_widget(bottom)
@@ -813,7 +802,8 @@ class CityScreen(Screen):
         self.say("Двигай карту пальцем. «+» - строить, казино - играть", WHITE)
         if self.first_visit:
             self.first_visit = False
-            self.map.center_on_casino(dp(35))  # the bottom panel is taller than the top one
+            # the bottom panel is taller than the top one, so the middle of the free map is higher
+            self.map.center_on_casino(dp((BOTTOM_PANEL - TOP_PANEL) / 2))
         self.refresh()
 
     def on_enter(self, *args):
@@ -852,19 +842,23 @@ class CityScreen(Screen):
         city = self.wallet.city
         rate = rules.income_per_hour(city)
         waiting = int(rules.pending(city))
+        button = self.collect_button
         if rate <= 0:
-            self.collect_button.text = "ПОСТРОЙ ПЕРВОЕ ЗДАНИЕ"
-            self.collect_button.btn_color = GRAY
-            self.collect_button.disabled = True
+            button.text = "ПОСТРОЙ ПЕРВОЕ ЗДАНИЕ"
+            button.btn_color = GRAY
+            button.color = WHITE
+            button.disabled = True
         elif waiting < 1:
-            self.collect_button.text = "Копится доход..."
-            self.collect_button.btn_color = GRAY
-            self.collect_button.disabled = True
+            button.text = "Копится доход..."
+            button.btn_color = GRAY
+            button.color = WHITE
+            button.disabled = True
         else:
             full = waiting >= int(rules.capacity(city))
-            self.collect_button.text = f"СОБРАТЬ +{fmt(waiting)}" + ("  (ПОЛНО)" if full else "")
-            self.collect_button.btn_color = GREEN
-            self.collect_button.disabled = False
+            button.text = f"СОБРАТЬ +{fmt(waiting)}" + ("  (ПОЛНО)" if full else "")
+            button.btn_color = GOLD_BUTTON
+            button.color = DARK_TEXT
+            button.disabled = False
 
     # --- actions ---
 
@@ -887,11 +881,13 @@ class CityScreen(Screen):
         )
         pulse(self.message_label)
 
-    def finish(self, text, cost, sound="chip"):
+    def finish(self, text, cost, sound="chip", index=None, big=True):
         Sfx.play(sound)
         float_text(self, f"-{fmt(cost)}", SOFT_RED, 0.5, 34)
         self.say(text, GOLD)
         self.refresh()
+        if index is not None:
+            self.map.plots[index].pop(big)
 
     def on_plot(self, tile):
         Sfx.play("click")
@@ -905,20 +901,22 @@ class CityScreen(Screen):
         go_to(self.manager, "menu", "right")
 
     def open_build(self, index):
-        dialog = Dialog("СТРОИТЕЛЬСТВО", dp(470))
-        dialog.add_text("Выбери, что построить", height=22, size=14)
+        dialog = Dialog("СТРОИТЕЛЬСТВО", dp(560))
+        dialog.add_text("Выбери, что построить на этом участке", height=22, size=14)
         mult = rules.income_multiplier(self.wallet.city)
         for type_id in rules.BUILDING_ORDER:
             spec = rules.BUILDINGS[type_id]
             cost = rules.upgrade_cost(type_id, 0)
+            income = spec["income"] * mult
             affordable = rules.can_afford(self.wallet.balance, cost)
             dialog.add_row(
                 spec["name"],
-                f"+{fmt(spec['income'] * mult)} фишек в час",
+                f"+{fmt(income)} в час · окупится за {fmt(max(1, round(cost / income)))} ч",
                 fmt(cost),
                 GREEN if affordable else GRAY,
                 lambda *a, i=index, t=type_id, d=dialog: self.do_build(d, i, t),
                 title_color=spec["color"][:3] + (1,),
+                image=building_art(type_id),
             )
         dialog.open()
 
@@ -927,7 +925,7 @@ class CityScreen(Screen):
         cost = rules.upgrade_cost(type_id, 0)
         result = rules.buy_building(self.wallet, index, type_id)
         if result == "ok":
-            self.finish(f"Построено: {rules.BUILDINGS[type_id]['name']}!", cost)
+            self.finish(f"Построено: {rules.BUILDINGS[type_id]['name']}!", cost, index=index)
         elif result == "reserve":
             self.not_enough(cost)
 
@@ -937,8 +935,9 @@ class CityScreen(Screen):
         level = plot["level"]
         mult = rules.income_multiplier(self.wallet.city)
 
-        dialog = Dialog(spec["name"].upper(), dp(300))
-        dialog.add_text(f"Уровень {level} из {rules.MAX_LEVEL}", height=26, size=17)
+        dialog = Dialog(spec["name"].upper(), dp(430))
+        dialog.add_picture(building_art(plot["type"]), dp(120))
+        dialog.add_text(f"Уровень {level} из {rules.MAX_LEVEL}", color=GOLD, height=26, size=17)
         dialog.add_text(
             f"Доход сейчас: {fmt(rules.building_income(plot['type'], level) * mult)} в час"
         )
@@ -966,14 +965,14 @@ class CityScreen(Screen):
         result = rules.upgrade_building(self.wallet, index)
         if result == "ok":
             level = self.wallet.city["plots"][index]["level"]
-            self.finish(f"{name}: уровень {level}!", cost)
+            self.finish(f"{name}: уровень {level}!", cost, index=index, big=False)
         elif result == "reserve":
             self.not_enough(cost)
 
     def open_landmarks(self, *args):
         Sfx.play("click")
         city = self.wallet.city
-        dialog = Dialog("ДОСТОПРИМЕЧАТЕЛЬНОСТИ", dp(450))
+        dialog = Dialog("ДОСТОПРИМЕЧАТЕЛЬНОСТИ", dp(500))
         dialog.add_text(
             f"Каждая даёт +{int(rules.LANDMARK_BONUS * 100)}% ко всему доходу города",
             height=24,
@@ -986,11 +985,11 @@ class CityScreen(Screen):
                 item["name"],
                 "построено" if owned else f"+{int(rules.LANDMARK_BONUS * 100)}% к доходу",
                 "ЕСТЬ" if owned else fmt(item["cost"]),
-                GOLD if owned else (GREEN if affordable else GRAY),
-                lambda *a, k=item["id"], d=dialog: self.do_landmark(d, k),
-                disabled=owned,
-                symbol=item["symbol"],
-                symbol_color=GOLD if owned else DIM,
+                GOLD_BUTTON if owned else (GREEN if affordable else GRAY),
+                (lambda *a: None) if owned else (lambda *a, k=item["id"], d=dialog: self.do_landmark(d, k)),
+                image=landmark_art(item["id"]),
+                dim_image=not owned,
+                chip=not owned,
             )
         dialog.open()
 

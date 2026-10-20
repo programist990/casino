@@ -1328,6 +1328,15 @@ class BlackjackScreen(Screen):
         self.wallet.take(self.bet)
         self.bet = self.bet * 2
         self.top_bar.set_balance(self.wallet.balance)
+        count = min(max(self.bet_stack.count * 2, 2), 10)
+        self.bet_stack.set_bet(self.bet, count, self.bet_stack.source, True)
+        self.fly_chip(
+            self.bet_stack.source,
+            self.balance_target(),
+            self.bet_stack.chip_center(),
+            0.0,
+            24,
+        )
         Sfx.play("chip")
         self.player.append(self.deck.pop())
         self.player.append(self.deck.pop())
@@ -1390,7 +1399,7 @@ class BlackjackScreen(Screen):
             text = text + ": +" + str(net)
             color = GOLD
         elif net < 0:
-            text = text + ": -" + str(bet)
+            text = text + ": -" + str(abs(net))
             color = SOFT_RED
 
         if outcome == "win" or outcome == "blackjack":
@@ -1492,6 +1501,9 @@ class BlackjackScreen(Screen):
         view.hop(18)
 
     def clear_stack(self, *args):
+        # a delayed clear must not wipe the chips of a round that already started
+        if self.in_round:
+            return
         self.bet_stack.clear()
 
     def restore_stack(self, *args):

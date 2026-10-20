@@ -94,32 +94,36 @@ def make_spot():
 
 
 def make_card_back():
+    """Card back: deep crimson with a gold lattice and a spade medallion."""
     width, height = 464, 688  # drawn 4x, saved 2x
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((0, 0, width - 1, height - 1), radius=64, fill=(250, 250, 252, 255))
+    draw.rounded_rectangle((0, 0, width - 1, height - 1), radius=64, fill=(250, 246, 238, 255))
 
     inner_box = (22, 22, width - 23, height - 23)
-    draw.rounded_rectangle(inner_box, radius=44, fill=(38, 77, 179, 255))
+    draw.rounded_rectangle(inner_box, radius=44, fill=(120, 18, 38, 255))
 
     pattern = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     pattern_draw = ImageDraw.Draw(pattern)
-    for offset in range(-height, width, 56):
-        pattern_draw.line((offset, 0, offset + height, height), fill=(95, 140, 235, 255), width=5)
-        pattern_draw.line((offset + height, 0, offset, height), fill=(95, 140, 235, 255), width=5)
+    for offset in range(-height, width, 64):
+        pattern_draw.line((offset, 0, offset + height, height), fill=(185, 55, 75, 255), width=4)
+        pattern_draw.line((offset + height, 0, offset, height), fill=(185, 55, 75, 255), width=4)
     mask = Image.new("L", (width, height), 0)
     ImageDraw.Draw(mask).rounded_rectangle(inner_box, radius=44, fill=255)
     image.paste(pattern, (0, 0), Image.composite(pattern.split()[3], Image.new("L", (width, height), 0), mask))
 
     draw = ImageDraw.Draw(image)
     draw.rounded_rectangle((44, 44, width - 45, height - 45), radius=30, outline=GOLD, width=6)
+    draw.rounded_rectangle((60, 60, width - 61, height - 61), radius=22, outline=GOLD_DARK, width=3)
     cx, cy = width / 2, height / 2
-    draw.ellipse((cx - 118, cy - 118, cx + 118, cy + 118), fill=(20, 45, 120, 255), outline=GOLD, width=8)
-    font = ImageFont.truetype(FONT_SUITS, 200)
-    draw.text((cx, cy + 6), "♦", font=font, fill=GOLD, anchor="mm")
-    small = ImageFont.truetype(FONT_SUITS, 60)
-    for px, py in ((92, 100), (width - 92, 100), (92, height - 100), (width - 92, height - 100)):
-        draw.text((px, py), "♦", font=small, fill=GOLD, anchor="mm")
+    draw.ellipse((cx - 128, cy - 128, cx + 128, cy + 128), fill=(60, 8, 22, 255), outline=GOLD, width=8)
+    draw.ellipse((cx - 108, cy - 108, cx + 108, cy + 108), outline=GOLD_DARK, width=3)
+    font = ImageFont.truetype(FONT_SUITS, 190)
+    draw.text((cx, cy + 4), "\u2660", font=font, fill=GOLD, anchor="mm")
+    small = ImageFont.truetype(FONT_SUITS, 54)
+    corners = ((100, 108, "\u2665"), (width - 100, 108, "\u2663"), (100, height - 108, "\u2663"), (width - 100, height - 108, "\u2665"))
+    for px, py, sym in corners:
+        draw.text((px, py), sym, font=small, fill=GOLD, anchor="mm")
 
     image.resize((116, 172), Image.LANCZOS).save(os.path.join(OUT_DIR, "card_back.png"))
 

@@ -44,6 +44,9 @@ from common import (
 HISTORY_LIMIT = 6
 
 
+MIN_CRASH_POINT = 1.20
+
+
 class CrashGraph(Widget):
     """Canvas widget showing a deep-space background with animated streaming stars,
 
@@ -519,10 +522,9 @@ class CrashScreen(Screen):
     def generate_crash_point(self):
         # 96% RTP house edge formula
         r = random.random()
-        if r < 0.04:
-            return 1.00
         mult = 0.96 / (1.0 - r)
-        return max(1.01, round(mult, 2))
+        # the rocket always climbs at least to x1.20
+        return max(MIN_CRASH_POINT, round(mult, 2))
 
     def on_action(self, *args):
         if not self.flying:

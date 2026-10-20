@@ -56,6 +56,33 @@ VIP_TIERS = [
 ]
 
 
+def fit_label(label, *args):
+    """Keeps a one-line label inside its box: shrinks the font, then shortens."""
+    if getattr(label, "_fitting", False) or label.width <= 1:
+        return
+    label._fitting = True
+    try:
+        base = getattr(label, "_base_font", None)
+        if base is None:
+            base = label._base_font = label.font_size
+            label.bind(text=fit_label)
+        label.shorten = True
+        label.shorten_from = "right"
+        label.max_lines = 1
+        label.text_size = (None, None)
+        size = base
+        label.font_size = size
+        label.texture_update()
+        min_size = base * 0.55
+        while label.texture_size[0] > label.width and size > min_size:
+            size -= dp(0.5)
+            label.font_size = size
+            label.texture_update()
+        label.text_size = (label.width, label.height)
+    finally:
+        label._fitting = False
+
+
 def format_chips(amount):
     """Format integer with thousands separator."""
     return f"{amount:,}".replace(",", " ")
@@ -323,7 +350,7 @@ class StatTile(BoxLayout):
         self.add_widget(self.lbl_sub)
 
     def _sync_text(self, instance, *args):
-        instance.text_size = instance.size
+        fit_label(instance)
 
     def _update_tile(self, *args):
         self.rect_bg.pos = self.pos
@@ -392,7 +419,7 @@ class StatRow(BoxLayout):
         self.add_widget(self.lbl_val)
 
     def _sync_size(self, instance, *args):
-        instance.text_size = instance.size
+        fit_label(instance)
 
     def _update_bg(self, *args):
         self.bg.pos = self.pos
@@ -780,7 +807,7 @@ class StatsScreen(Screen):
         self.add_widget(root)
 
     def _sync_text_size(self, instance, *args):
-        instance.text_size = instance.size
+        fit_label(instance)
 
     def on_pre_enter(self, *args):
         self.refresh()
@@ -993,14 +1020,6 @@ class MenuScreen(Screen):
         self.city_button = self.add_menu_button(root, "Город", (0.55, 0.3, 0.75, 1), self.open_city)
         self.add_menu_button(root, "Статистика", GRAY, self.open_stats)
         self.add_menu_button(root, "Выход", (0.2, 0.2, 0.25, 1), self.exit_app)
-
-        note = GLabel(
-            text="Игра на виртуальные фишки, без реальных денег",
-            font_size=dp(17),
-            color=(1, 1, 1, 0.45),
-            size_hint_y=0.04,
-        )
-        root.add_widget(note)
 
         self.add_widget(root)
 
