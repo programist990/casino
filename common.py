@@ -15,7 +15,7 @@ from kivy.uix.label import Label
 
 from city_data import new_city, sanitize_city
 
-START_BALANCE = 1000000
+START_BALANCE = 1000
 BETS = [100, 500, 1000, 5000, 10000, 50000]
 
 # ----- theme -----
