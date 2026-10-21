@@ -27,8 +27,8 @@ presplash.filename = %(source.dir)s/assets/android/presplash.png
 android.presplash_color = #02170F
 
 # --- android ---
-# the game needs no internet and no other permissions
-android.permissions =
+# the game needs no internet; the only permission is the vibration of the phone
+android.permissions = VIBRATE
 # 64-bit only: faster build, works on every phone of the last ~8 years.
 # For very old 32-bit phones use: arm64-v8a, armeabi-v7a
 android.archs = arm64-v8a

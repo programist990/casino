@@ -9,7 +9,7 @@ class Any:
 def stub(name, **attrs):
     m = types.ModuleType(name); m.__dict__.update(attrs); sys.modules[name] = m
 for name in ["kivy","kivy.animation","kivy.core","kivy.core.audio","kivy.graphics","kivy.graphics.texture",
-             "kivy.metrics","kivy.properties","kivy.uix","kivy.uix.boxlayout","kivy.uix.button","kivy.uix.image","kivy.uix.label"]:
+             "kivy.metrics","kivy.properties","kivy.uix","kivy.uix.boxlayout","kivy.uix.button","kivy.uix.image","kivy.uix.label","kivy.utils"]:
     stub(name)
 sys.modules["kivy.animation"].Animation = Any
 sys.modules["kivy.core.audio"].SoundLoader = Any
@@ -21,6 +21,7 @@ sys.modules["kivy.uix.boxlayout"].BoxLayout = type("BoxLayout",(),{"__init__":la
 sys.modules["kivy.uix.button"].Button = type("Button",(),{})
 sys.modules["kivy.uix.image"].Image = type("Image",(),{})
 sys.modules["kivy.uix.label"].Label = type("Label",(),{})
+sys.modules["kivy.utils"].platform = "linux"
 
 import city_data as cd
 from common import Wallet
@@ -121,3 +122,9 @@ for d_ in range(0, int(route.total), 25):
     x, y, _ = route.at(d_)
     assert cd.path_distance(x, y, cd.RING, True) < cd.RING_WIDTH / 2   # cars stay on the road
 print("geometry tests passed;", len(spots), "things on the map")
+
+# ---- vibration: harmless on a computer, and Sfx.play never breaks because of it ----
+from common import Haptics, Sfx
+Haptics.buzz("win"); Sfx.play("win"); Sfx.play("click", volume=0.5)
+assert Haptics._failed is True and Haptics._vibrator is None
+print("haptics tests passed")

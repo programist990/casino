@@ -12,10 +12,11 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.label import Label
+from kivy.utils import platform
 
 from city_data import new_city, sanitize_city
 
-START_BALANCE = 1000
+START_BALANCE = 1000000
 BETS = [100, 500, 1000, 5000, 10000, 50000]
 
 # ----- theme -----
@@ -45,6 +46,71 @@ def symbol_path(name):
 SOUND_DIR = os.path.join(BASE_DIR, "assets", "sounds")
 
 
+class Haptics:
+    """Phone vibration. Every sound name has its own feel (Sfx.play calls this for you),
+    so no game needs to know about vibration. On a computer nothing happens.
+
+    A pattern is milliseconds: pause, buzz, pause, buzz, ...
+    """
+
+    enabled = True
+    PATTERNS = {
+        "click": [0, 20],
+        "chip": [0, 25],
+        "deal": [0, 22],
+        "flip": [0, 22],
+        "push": [0, 35],
+        "stop": [0, 40],
+        "spin": [0, 30],
+        "win": [0, 45, 70, 70],
+        "bonus": [0, 35, 60, 35, 60, 80],
+        "blackjack": [0, 55, 80, 55, 80, 140],
+        "lose": [0, 180],
+        "crash": [0, 320],
+    }
+    _vibrator = None
+    _effect = None
+    _failed = platform != "android"
+
+    @classmethod
+    def _setup(cls):
+        try:
+            from jnius import autoclass
+
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            context = autoclass("android.content.Context")
+            vibrator = activity.getSystemService(context.VIBRATOR_SERVICE)
+            if vibrator is None or not vibrator.hasVibrator():
+                cls._failed = True
+                return
+            cls._vibrator = vibrator
+            try:  # Android 8+ has patterns with VibrationEffect, older phones use the old call
+                cls._effect = autoclass("android.os.VibrationEffect")
+            except Exception:
+                cls._effect = None
+        except Exception:
+            cls._failed = True
+
+    @classmethod
+    def buzz(cls, name):
+        if not cls.enabled or cls._failed:
+            return
+        pattern = cls.PATTERNS.get(name)
+        if not pattern:
+            return
+        try:
+            if cls._vibrator is None:
+                cls._setup()
+                if cls._failed:
+                    return
+            if cls._effect is not None:
+                cls._vibrator.vibrate(cls._effect.createWaveform(pattern, -1))
+            else:
+                cls._vibrator.vibrate(pattern, -1)
+        except Exception:
+            cls._failed = True  # something is wrong with this phone: stop trying
+
+
 class Sfx:
     """Tiny sound player shared across all casino games."""
 
@@ -53,6 +119,8 @@ class Sfx:
 
     @classmethod
     def play(cls, name, volume=1.0):
+        if volume >= 0.8:  # quiet ticks (roulette ball) make no vibration
+            Haptics.buzz(name)
         if not cls.enabled:
             return
         try:
