@@ -106,9 +106,18 @@ CASINO_W = 240
 CASINO_H = 200
 PLOT_SIZE = 110
 PLOT_OFFSETS = [
-    (0, 210), (225, 0), (0, -210), (-225, 0),
-    (225, 210), (225, -210), (-225, -210), (-225, 210),
-    (0, 400), (430, 0), (0, -400), (-430, 0),
+    (0, 210),
+    (225, 0),
+    (0, -210),
+    (-225, 0),
+    (225, 210),
+    (225, -210),
+    (-225, -210),
+    (-225, 210),
+    (0, 400),
+    (430, 0),
+    (0, -400),
+    (-430, 0),
 ]
 assert len(PLOT_OFFSETS) == PLOT_COUNT
 
@@ -138,11 +147,18 @@ def _spline(points, steps=10):
         for k in range(steps):
             t = k / steps
             t2, t3 = t * t, t * t * t
-            out.append(tuple(
-                0.5 * ((2 * p1[c]) + (-p0[c] + p2[c]) * t
-                       + (2 * p0[c] - 5 * p1[c] + 4 * p2[c] - p3[c]) * t2
-                       + (-p0[c] + 3 * p1[c] - 3 * p2[c] + p3[c]) * t3)
-                for c in (0, 1)))
+            out.append(
+                tuple(
+                    0.5
+                    * (
+                        (2 * p1[c])
+                        + (-p0[c] + p2[c]) * t
+                        + (2 * p0[c] - 5 * p1[c] + 4 * p2[c] - p3[c]) * t2
+                        + (-p0[c] + 3 * p1[c] - 3 * p2[c] + p3[c]) * t3
+                    )
+                    for c in (0, 1)
+                )
+            )
     out.append(tuple(points[-1]))
     return out
 
@@ -151,7 +167,12 @@ def rounded_square(half, radius, steps=14):
     """Closed path of a rounded square, clockwise (the top side goes left to right)."""
     c = half - radius
     pts = []
-    for cx, cy, a0, a1 in ((c, c, 90, 0), (c, -c, 0, -90), (-c, -c, -90, -180), (-c, c, 180, 90)):
+    for cx, cy, a0, a1 in (
+        (c, c, 90, 0),
+        (c, -c, 0, -90),
+        (-c, -c, -90, -180),
+        (-c, c, 180, 90),
+    ):
         for i in range(steps + 1):
             a = math.radians(a0 + (a1 - a0) * i / steps)
             pts.append((cx + radius * math.cos(a), cy + radius * math.sin(a)))
@@ -178,18 +199,42 @@ def _rotated(points):
 
 # roads: kind, width (dp), points (a closed shape for the ring)
 RING = rounded_square(RING_HALF, RING_RADIUS)
-SIDE_ROAD_1 = _spline([(-112, 330), (-230, 365), (-320, 335), (-375, 260), (-380, 170), (-372, 105)])
+SIDE_ROAD_1 = _spline(
+    [(-112, 330), (-230, 365), (-320, 335), (-375, 260), (-380, 170), (-372, 105)]
+)
 SIDE_ROAD_2 = _rotated(SIDE_ROAD_1)
-DIRT_ROAD = _spline([(-112, -330), (-200, -390), (-300, -350), (-380, -260), (-460, -300), (-525, -255)])
+DIRT_ROAD = _spline(
+    [(-112, -330), (-200, -390), (-300, -350), (-380, -260), (-460, -300), (-525, -255)]
+)
 STREAM = _spline([(450, 345), (500, 322), (525, 300), (560, 285), (620, 280)])
 BRIDGE_AT = (525, 300)  # where the stream crosses the ring road
 
 ROADS = [
     {"id": "ring", "kind": "ring", "width": RING_WIDTH, "points": RING, "closed": True},
-    {"id": "av_l", "kind": "avenue", "width": ROAD_WIDTH, "points": [(-112, -RING_HALF), (-112, RING_HALF)]},
-    {"id": "av_r", "kind": "avenue", "width": ROAD_WIDTH, "points": [(112, -RING_HALF), (112, RING_HALF)]},
-    {"id": "av_b", "kind": "avenue", "width": ROAD_WIDTH, "points": [(-RING_HALF, -105), (RING_HALF, -105)]},
-    {"id": "av_t", "kind": "avenue", "width": ROAD_WIDTH, "points": [(-RING_HALF, 105), (RING_HALF, 105)]},
+    {
+        "id": "av_l",
+        "kind": "avenue",
+        "width": ROAD_WIDTH,
+        "points": [(-112, -RING_HALF), (-112, RING_HALF)],
+    },
+    {
+        "id": "av_r",
+        "kind": "avenue",
+        "width": ROAD_WIDTH,
+        "points": [(112, -RING_HALF), (112, RING_HALF)],
+    },
+    {
+        "id": "av_b",
+        "kind": "avenue",
+        "width": ROAD_WIDTH,
+        "points": [(-RING_HALF, -105), (RING_HALF, -105)],
+    },
+    {
+        "id": "av_t",
+        "kind": "avenue",
+        "width": ROAD_WIDTH,
+        "points": [(-RING_HALF, 105), (RING_HALF, 105)],
+    },
     {"id": "side1", "kind": "side", "width": SIDE_WIDTH, "points": SIDE_ROAD_1},
     {"id": "side2", "kind": "side", "width": SIDE_WIDTH, "points": SIDE_ROAD_2},
     {"id": "dirt", "kind": "dirt", "width": DIRT_WIDTH, "points": DIRT_ROAD},
@@ -238,8 +283,11 @@ class Route:
         start = self.lengths[lo - 1] if lo > 0 else 0.0
         seg = max(1e-9, self.lengths[lo] - start)
         t = (distance - start) / seg
-        return (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t,
-                math.degrees(math.atan2(y1 - y0, x1 - x0)))
+        return (
+            x0 + (x1 - x0) * t,
+            y0 + (y1 - y0) * t,
+            math.degrees(math.atan2(y1 - y0, x1 - x0)),
+        )
 
 
 # ----- little geometry helpers -----
@@ -248,7 +296,11 @@ class Route:
 def seg_distance(px, py, ax, ay, bx, by):
     dx, dy = bx - ax, by - ay
     length2 = dx * dx + dy * dy
-    t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length2))
+    t = (
+        0.0
+        if length2 == 0
+        else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length2))
+    )
     return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 
 
@@ -289,14 +341,18 @@ def road_clearance(px, py, skip=None):
         if road["id"] == skip:
             continue
         reach = road["width"] / 2 + (0 if road["kind"] == "dirt" else PAVE)
-        best = min(best, path_distance(px, py, road["points"], road.get("closed", False)) - reach)
+        best = min(
+            best,
+            path_distance(px, py, road["points"], road.get("closed", False)) - reach,
+        )
     best = min(best, path_distance(px, py, STREAM) - STREAM_WIDTH / 2)
     return best
 
 
 def in_desert(px, py):
     return max(abs(px), abs(py)) > DESERT_EDGE or (
-        in_polygon(px, py, DESERT_PATCH) and not near_polygon(px, py, BEACH, 0))
+        in_polygon(px, py, DESERT_PATCH) and not near_polygon(px, py, BEACH, 0)
+    )
 
 
 def blocked(px, py, radius):
@@ -322,9 +378,18 @@ def blocked(px, py, radius):
 # ----- what stands on the map -----
 # kind -> (width, height) in dp. The bottom of the picture stands slightly below the point.
 DECOR_SIZE = {
-    "round": (52, 52), "pine": (50, 56), "pink": (52, 52), "bush": (30, 30),
-    "palm": (58, 76), "cactus": (30, 50), "barrel": (26, 26), "rock": (34, 26),
-    "dry": (30, 24), "lamp": (18, 46), "bench": (36, 22), "umbrella": (40, 40),
+    "round": (52, 52),
+    "pine": (50, 56),
+    "pink": (52, 52),
+    "bush": (30, 30),
+    "palm": (58, 76),
+    "cactus": (30, 50),
+    "barrel": (26, 26),
+    "rock": (34, 26),
+    "dry": (30, 24),
+    "lamp": (18, 46),
+    "bench": (36, 22),
+    "umbrella": (40, 40),
     "billboard": (84, 76),
 }
 
@@ -347,11 +412,23 @@ def _fixed_decor():
                 items.append(("palm", x + side * 40, y + 12 * side))
     # the park, the lake, the parking
     cx, cy, w, h = PARK
-    items += [("bench", cx - 88, cy - 4), ("bench", cx + 88, cy - 4),
-              ("round", cx - 55, cy + 32), ("pink", cx + 72, cy + 38),
-              ("pink", cx - 72, cy - 40), ("round", cx + 74, cy - 38)]
-    items += [("umbrella", 285, 380), ("umbrella", 398, 448), ("umbrella", 352, 284),
-              ("palm", 262, 345), ("palm", 305, 440), ("palm", 470, 420), ("palm", 440, 285)]
+    items += [
+        ("bench", cx - 88, cy - 4),
+        ("bench", cx + 88, cy - 4),
+        ("round", cx - 55, cy + 32),
+        ("pink", cx + 72, cy + 38),
+        ("pink", cx - 72, cy - 40),
+        ("round", cx + 74, cy - 38),
+    ]
+    items += [
+        ("umbrella", 285, 380),
+        ("umbrella", 398, 448),
+        ("umbrella", 352, 284),
+        ("palm", 262, 345),
+        ("palm", 305, 440),
+        ("palm", 470, 420),
+        ("palm", 440, 285),
+    ]
     items += [("billboard", 303, -452), ("lamp", 350, -380), ("lamp", 500, -380)]
     return items
 
@@ -362,30 +439,55 @@ def decor_spots(seed=7):
     items = []
     for kind, x, y in _fixed_decor():
         if kind == "lamp":
-            ok = (not (abs(x) > MAP_W / 2 or abs(y) > MAP_H / 2) and not math.hypot(x, y) < PLAZA_R + 6
-                  and road_clearance(x, y) > -PAVE - 4)
-            parent = next((r["id"] for r in ROADS if r["kind"] == "avenue"
-                           and path_distance(x, y, r["points"]) < ROAD_WIDTH / 2 + PAVE + 1), None)
+            ok = (
+                not (abs(x) > MAP_W / 2 or abs(y) > MAP_H / 2)
+                and not math.hypot(x, y) < PLAZA_R + 6
+                and road_clearance(x, y) > -PAVE - 4
+            )
+            parent = next(
+                (
+                    r["id"]
+                    for r in ROADS
+                    if r["kind"] == "avenue"
+                    and path_distance(x, y, r["points"]) < ROAD_WIDTH / 2 + PAVE + 1
+                ),
+                None,
+            )
             ok = ok and parent is not None and road_clearance(x, y, skip=parent) > 8
-            if not (ok and not any(in_rect(x, y, (dx, dy, PLOT_SIZE, PLOT_SIZE), 6) for dx, dy in PLOT_OFFSETS)):
+            if not (
+                ok
+                and not any(
+                    in_rect(x, y, (dx, dy, PLOT_SIZE, PLOT_SIZE), 6)
+                    for dx, dy in PLOT_OFFSETS
+                )
+            ):
                 continue
         elif kind == "palm":
-            if (math.hypot(x, y) < PLAZA_R + 24 or road_clearance(x, y) < 14
-                    or any(in_rect(x, y, (dx, dy, PLOT_SIZE, PLOT_SIZE), 8) for dx, dy in PLOT_OFFSETS)):
+            if (
+                math.hypot(x, y) < PLAZA_R + 24
+                or road_clearance(x, y) < 14
+                or any(
+                    in_rect(x, y, (dx, dy, PLOT_SIZE, PLOT_SIZE), 8)
+                    for dx, dy in PLOT_OFFSETS
+                )
+            ):
                 continue
         items.append((kind, x, y))
 
     taken = [(x, y, 16) for _, x, y in items]
 
     def free(x, y, r):
-        return (not blocked(x, y, r)
-                and not any((x - tx) ** 2 + (y - ty) ** 2 < (r + tr) ** 2 for tx, ty, tr in taken))
+        return not blocked(x, y, r) and not any(
+            (x - tx) ** 2 + (y - ty) ** 2 < (r + tr) ** 2 for tx, ty, tr in taken
+        )
 
     half = MAP_W / 2
     target = {"green": 62, "desert": 60}
     counts = {"green": 0, "desert": 0}
     attempts = 0
-    while attempts < 6000 and (counts["green"] < target["green"] or counts["desert"] < target["desert"]):
+    while attempts < 6000 and (
+        counts["green"] < target["green"] or counts["desert"] < target["desert"]
+    ):
         attempts += 1
         x = rng.uniform(-half + 14, half - 14)
         y = rng.uniform(-half + 14, half - 14)
@@ -395,7 +497,9 @@ def decor_spots(seed=7):
         if counts[zone] >= target[zone]:
             continue
         if zone == "desert":
-            kind = rng.choice(["cactus", "cactus", "barrel", "rock", "rock", "dry", "dry"])
+            kind = rng.choice(
+                ["cactus", "cactus", "barrel", "rock", "rock", "dry", "dry"]
+            )
             r = 11
         else:
             kind = rng.choice(["round", "pine", "pink", "bush", "bush", "round"])
@@ -523,7 +627,9 @@ def pending(city, now=None):
         return 0.0
     elapsed = 0.0
     if city["last_collect"] > 0:
-        elapsed = max(0.0, now - city["last_collect"])  # clock moved back = 0, not negative
+        elapsed = max(
+            0.0, now - city["last_collect"]
+        )  # clock moved back = 0, not negative
     return min(capacity(city), city["stored"] + rate * elapsed)
 
 
@@ -637,9 +743,9 @@ HITS_TO_PASS = 2
 SLIDER_PERIOD = 1.5  # seconds for the slider to go there and back, first try
 SLIDER_SPEEDUP = 0.82  # every next try the period is multiplied by this
 
-INSPECTION_MIN_GAP = 100  # seconds between two inspections (random in this range)
-INSPECTION_MAX_GAP = 200
-FINE_SHARE = 0.08  # the fine is this share of the balance...
+INSPECTION_MIN_GAP = 50  # seconds between two inspections (random in this range)
+INSPECTION_MAX_GAP = 100
+FINE_SHARE = 0.5  # the fine is this share of the balance...
 FINE_MIN = 300  # ...but not less than this
 
 
@@ -686,7 +792,9 @@ def inspection_fine(wallet):
     guards = wallet.city["guards"]
     base = max(FINE_MIN, int(wallet.balance * FINE_SHARE))
     fine = int(base * (1 - GUARD_FINE_CUT * guards))
-    return max(0, min(fine, wallet.balance // 2))  # never takes more than half of the chips
+    return max(
+        0, min(fine, wallet.balance // 2)
+    )  # never takes more than half of the chips
 
 
 def hire_guard(wallet):
@@ -721,8 +829,13 @@ def finish_inspection(wallet, passed):
 # of the door and disappear inside. Inspectors use the very same routes, so they look like
 # everybody else. All points are in dp, (0, 0) is the middle of the map.
 
-SIDEWALK = ROAD_WIDTH / 2 + PAVE / 2  # distance from the middle of an avenue to its pavement
-DOOR = (0, -CASINO_H / 2 - 3)  # the foot of the building on the red carpet: people vanish here
+SIDEWALK = (
+    ROAD_WIDTH / 2 + PAVE / 2
+)  # distance from the middle of an avenue to its pavement
+DOOR = (
+    0,
+    -CASINO_H / 2 - 3,
+)  # the foot of the building on the red carpet: people vanish here
 WALK_END = RING_HALF - 40  # people appear / turn around this far from the middle
 
 _NEAR = 121.5  # = 105 + SIDEWALK, the pavement in front of the casino
@@ -754,8 +867,10 @@ STROLL_PATHS = _strolls()
 
 
 def route_length(points):
-    return sum(math.hypot(points[i + 1][0] - points[i][0], points[i + 1][1] - points[i][1])
-               for i in range(len(points) - 1))
+    return sum(
+        math.hypot(points[i + 1][0] - points[i][0], points[i + 1][1] - points[i][1])
+        for i in range(len(points) - 1)
+    )
 
 
 def point_on_route(points, distance):
