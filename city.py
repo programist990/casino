@@ -1,4 +1,6 @@
+import math
 import os
+import random
 
 from kivy.animation import Animation
 from kivy.clock import Clock
@@ -7,6 +9,7 @@ from kivy.core.window import Window
 from kivy.graphics import (
     BorderImage,
     Color,
+    Ellipse,
     InstructionGroup,
     Line,
     PopMatrix,
@@ -32,11 +35,13 @@ from kivy.uix.widget import Widget
 import city_data as rules
 from common import (
     BASE_DIR,
+    BLUE,
     CHIP_IMAGE,
     FONT_SUITS,
     GOLD,
     GRAY,
     GREEN,
+    RED,
     SOFT_RED,
     WHITE,
     GLabel,
@@ -409,6 +414,243 @@ class CasinoBuilding(FloatLayout):
         self.glow_color.a = value
 
 
+# ----- people on the pavements -----
+
+PEOPLE_COUNT = 16
+WALK_SPEED = (17, 27)  # dp per second
+PERSON_COLORS = [
+    (0.85, 0.3, 0.3), (0.3, 0.5, 0.85), (0.9, 0.75, 0.25), (0.35, 0.7, 0.45),
+    (0.7, 0.4, 0.8), (0.95, 0.6, 0.3), (0.88, 0.88, 0.9), (0.3, 0.75, 0.8),
+]
+SUIT = (0.2, 0.22, 0.27)  # the inspector's suit...
+SUIT_ALT = (0.23, 0.25, 0.31)  # ...and the almost identical suit of ordinary people
+UNIFORM = (0.1, 0.2, 0.5)
+LEGS = (0.14, 0.16, 0.21)
+CASE_COLOR = (0.42, 0.26, 0.12)
+SKINS = [(0.96, 0.8, 0.65), (0.82, 0.62, 0.46), (0.62, 0.44, 0.32), (0.98, 0.86, 0.74)]
+HAIRS = [(0.12, 0.09, 0.07), (0.35, 0.22, 0.1), (0.75, 0.6, 0.3), (0.5, 0.5, 0.52)]
+GUARD_SPOTS = [(-24, -112), (24, -112), (-46, -112)]  # in front of the casino door
+
+
+class Person:
+    """A tiny walking man drawn with a few shapes. role is "citizen", "inspector" or "guard".
+
+    Inspectors look like everybody else on purpose: part of the citizens wear the same
+    dark suit and carry the same briefcase. Only a guard can tell them apart (red "!").
+    """
+
+    def __init__(self, rng, role):
+        self.rng = rng
+        self.role = role
+        self.state = "stand" if role == "guard" else "hidden"
+        self.alpha = 0.0
+        self.x = self.y = 0.0
+        self.face = 1
+        self.phase = rng.uniform(0, 6.28)
+        self.speed = rng.uniform(*WALK_SPEED)
+        self.timer = rng.uniform(0, 5) if role == "citizen" else 0.0
+        self.route = None
+        self.path = None
+        self.length = 0.0
+        self.dist = 0.0
+        self.dir = 1
+        self.show = False  # guards: hired or not
+        self.reveal = False  # inspectors: marked with "!" because the casino has a guard
+        self.moving = False
+        self.drawn = True
+        self.new_look()
+        self.build()
+
+    def new_look(self):
+        r = self.rng
+        self.skin = r.choice(SKINS)
+        self.hair = r.choice(HAIRS)
+        self.case = False
+        if self.role == "inspector":
+            self.cloth, self.case = SUIT, True
+        elif self.role == "guard":
+            self.cloth = UNIFORM
+        else:
+            suited = r.random() < 0.3
+            self.cloth = SUIT_ALT if suited else r.choice(PERSON_COLORS)
+            self.case = (suited and r.random() < 0.5) or r.random() < 0.1
+        self.speed = r.uniform(*WALK_SPEED)
+
+    def build(self):
+        self.c_shadow = Color(0, 0, 0, 0)
+        self.shadow = Ellipse()
+        self.c_legs = Color(*LEGS, 0)
+        self.leg1 = Rectangle()
+        self.leg2 = Rectangle()
+        self.c_case = Color(*CASE_COLOR, 0)
+        self.case_rect = Rectangle()
+        self.c_body = Color(*self.cloth, 0)
+        self.body = RoundedRectangle(radius=[dp(2.5)])
+        self.c_head = Color(*self.skin, 0)
+        self.head = Ellipse()
+        self.c_hair = Color(*self.hair, 0)
+        self.hair_shape = Ellipse()
+        self.c_hat = Color(0.05, 0.1, 0.3, 0)
+        self.hat = Rectangle()
+        self.c_badge = Color(1, 0.82, 0.25, 0)
+        self.badge = Ellipse()
+        self.c_mark = Color(0.9, 0.15, 0.15, 0)
+        self.mark = Ellipse()
+        self.c_bang = Color(1, 1, 1, 0)
+        self.bang1 = Rectangle()
+        self.bang2 = Rectangle()
+
+    def hide_shapes(self):
+        for color in (self.c_shadow, self.c_legs, self.c_case, self.c_body, self.c_head,
+                      self.c_hair, self.c_hat, self.c_badge, self.c_mark, self.c_bang):
+            color.a = 0
+
+    # --- movement ---
+
+    def start_stroll(self):
+        self.new_look()
+        self.path = self.rng.choice(rules.STROLL_PATHS)
+        self.length = rules.route_length(list(self.path))
+        self.dist = self.rng.uniform(0, self.length)
+        self.dir = self.rng.choice((-1, 1))
+        self.alpha = 0.0
+        self.state = "stroll"
+
+    def start_visit(self, route=None, new_look=True):
+        if new_look:
+            self.new_look()
+        self.route = route or self.rng.choice(rules.ARRIVAL_ROUTES)
+        self.length = rules.route_length(self.route)
+        self.dist = 0.0
+        self.alpha = 0.0
+        self.state = "visit"
+
+    def start_leaving(self):
+        """The inspector comes out of the door and walks back the way he came."""
+        self.length = rules.route_length(self.route)
+        self.dist = self.length
+        self.alpha = 0.0
+        self.state = "out"
+
+    def step_to(self, x, y):
+        if abs(x - self.x) > 1e-6:
+            self.face = 1 if x > self.x else -1
+        self.x, self.y = x, y
+
+    def update(self, dt, world):
+        state = self.state
+        self.moving = False
+        if state == "hidden":
+            if self.role == "citizen":
+                self.timer -= dt
+                if self.timer <= 0:
+                    if self.rng.random() < 0.45:
+                        self.start_visit()
+                    else:
+                        self.start_stroll()
+            return
+        if state == "inside":
+            return
+        if state == "stand":
+            target = 1.0 if self.show else 0.0
+            self.alpha += max(-dt * 2, min(dt * 2, target - self.alpha))
+            self.phase += dt * 1.6
+            return
+        if state in ("stroll", "visit", "out") and self.alpha < 1 and not (
+            state == "out" and self.dist < 40
+        ):
+            self.alpha = min(1.0, self.alpha + dt * 2.5)
+        self.phase += dt * self.speed * 0.45
+        if state == "stroll":
+            self.dist += self.speed * dt * self.dir
+            if self.dist >= self.length:
+                self.dist, self.dir = self.length, -1
+            elif self.dist <= 0:
+                self.dist, self.dir = 0.0, 1
+            self.step_to(*rules.point_on_route(list(self.path), self.dist))
+            self.moving = True
+        elif state == "visit":
+            self.dist += self.speed * dt
+            self.step_to(*rules.point_on_route(self.route, self.dist))
+            self.moving = True
+            if self.dist >= self.length:
+                self.state = "fade"
+        elif state == "fade":  # goes through the door
+            self.alpha -= dt * 2.5
+            if self.alpha <= 0:
+                self.alpha = 0.0
+                if self.role == "inspector":
+                    self.state = "inside"
+                    world.inspector_arrived(self)
+                else:
+                    self.state = "hidden"
+                    self.timer = self.rng.uniform(4, 16)
+        elif state == "out":
+            self.dist -= self.speed * dt
+            self.step_to(*rules.point_on_route(self.route, self.dist))
+            self.moving = True
+            if self.dist < 40:
+                self.alpha = max(0.0, self.dist / 40)
+            if self.dist <= 0:
+                self.state = "hidden"
+                self.alpha = 0.0
+
+    # --- drawing ---
+
+    def place(self, world, now):
+        a = self.alpha
+        if a <= 0.01:
+            if self.drawn:
+                self.hide_shapes()
+                self.drawn = False
+            return
+        self.drawn = True
+        if self.role == "guard":
+            self.x, self.y = self.spot
+        mx, my = world.to_map(self.x, self.y)
+        swing = math.sin(self.phase) if self.moving else 0.0
+        bob = abs(swing) * dp(0.9)
+        if self.role == "guard":
+            bob = (math.sin(self.phase) + 1) * dp(0.25)
+        self.c_shadow.rgba = (0, 0, 0, 0.28 * a)
+        self.shadow.pos = (mx - dp(5), my - dp(2.5))
+        self.shadow.size = (dp(10), dp(5))
+        self.c_legs.rgba = (*LEGS, a)
+        self.leg1.pos = (mx - dp(3.2), my + dp(0.2) + swing * dp(1.4))
+        self.leg1.size = (dp(2.6), dp(5.5))
+        self.leg2.pos = (mx + dp(0.6), my + dp(0.2) - swing * dp(1.4))
+        self.leg2.size = (dp(2.6), dp(5.5))
+        self.c_body.rgba = (*self.cloth, a)
+        self.body.pos = (mx - dp(3.8), my + dp(4.6) + bob)
+        self.body.size = (dp(7.6), dp(9))
+        self.c_case.rgba = (*CASE_COLOR, a if self.case else 0)
+        self.case_rect.pos = (mx + self.face * dp(4.6) - dp(2.4), my + dp(4.8) + bob + swing * dp(0.4))
+        self.case_rect.size = (dp(4.8), dp(3.6))
+        self.c_head.rgba = (*self.skin, a)
+        self.head.pos = (mx - dp(3.2), my + dp(13) + bob)
+        self.head.size = (dp(6.4), dp(6.4))
+        guard = self.role == "guard"
+        self.c_hair.rgba = (*self.hair, 0 if guard else a)
+        self.hair_shape.pos = (mx - dp(3.2), my + dp(16.3) + bob)
+        self.hair_shape.size = (dp(6.4), dp(3.2))
+        self.c_hat.a = a if guard else 0
+        self.hat.pos = (mx - dp(3.8), my + dp(17.6) + bob)
+        self.hat.size = (dp(7.6), dp(2.8))
+        self.c_badge.a = a if guard else 0
+        self.badge.pos = (mx - dp(1.2), my + dp(10.6) + bob)
+        self.badge.size = (dp(2.4), dp(2.4))
+        marked = self.reveal and self.role == "inspector" and self.state in ("visit", "fade")
+        lift = math.sin(now * 7) * dp(1.5)
+        self.c_mark.a = a if marked else 0
+        self.mark.pos = (mx - dp(5.5), my + dp(22) + bob + lift)
+        self.mark.size = (dp(11), dp(11))
+        self.c_bang.a = a if marked else 0
+        self.bang1.pos = (mx - dp(0.8), my + dp(25) + bob + lift)
+        self.bang1.size = (dp(1.6), dp(5))
+        self.bang2.pos = (mx - dp(0.8), my + dp(23.2) + bob + lift)
+        self.bang2.size = (dp(1.6), dp(1.6))
+
+
 # ----- the map -----
 
 
@@ -424,6 +666,12 @@ class MapWorld(Widget):
         self.life_event = None
         self.cars = []
         self.clouds = []
+        self.people = []
+        self.inspectors = []
+        self.guards = []
+        self.on_inspector = None  # called when an inspector reaches the casino door
+        self.reveal = False
+        self.clock = 0.0
         with self.canvas.before:
             PushMatrix()
             self.shift = Translate(0, 0)
@@ -499,7 +747,50 @@ class MapWorld(Widget):
                     "rect": rect,
                 }
             )
+
+        # people: citizens, two inspectors (hidden until they are sent) and the guards at the door
+        crowd = random.Random(11)
+        for _ in range(PEOPLE_COUNT):
+            self.people.append(Person(crowd, "citizen"))
+        for _ in range(2):
+            self.inspectors.append(Person(crowd, "inspector"))
+        for index in range(rules.MAX_GUARDS):
+            guard = Person(crowd, "guard")
+            guard.spot = GUARD_SPOTS[index]
+            self.guards.append(guard)
         self.update_life(0)
+
+    def everyone(self):
+        return self.people + self.inspectors + self.guards
+
+    def set_guards(self, count):
+        for index, guard in enumerate(self.guards):
+            guard.show = index < count
+        self.reveal = count >= 1
+        for person in self.inspectors:
+            person.reveal = self.reveal
+
+    def spawn_inspector(self):
+        """Sends an inspector from the edge of the map. Returns him, or None if both are busy."""
+        for person in self.inspectors:
+            if person.state == "hidden":
+                person.start_visit(route=random.choice(rules.ARRIVAL_ROUTES), new_look=False)
+                person.speed = random.uniform(*WALK_SPEED)
+                person.reveal = self.reveal
+                return person
+        return None
+
+    def inspector_arrived(self, person):
+        if self.on_inspector is not None:
+            self.on_inspector(person)
+
+    def release_inspector(self, person):
+        person.start_leaving()
+
+    def reset_inspectors(self):
+        for person in self.inspectors:
+            person.state = "hidden"
+            person.alpha = 0.0
 
     def start_life(self):
         if self.life_event is None:
@@ -525,6 +816,10 @@ class MapWorld(Widget):
             if cloud["x"] > rules.MAP_W + 250:
                 cloud["x"] = -450
             cloud["rect"].pos = (dp(cloud["x"]), self.to_map(0, cloud["y"])[1])
+        self.clock += dt
+        for person in self.everyone():
+            person.update(dt, self)
+            person.place(self, self.clock)
 
 
 class MapView(StencilView):
@@ -801,6 +1096,7 @@ class Dialog(ModalView):
         close.font_size = dp(18)
         close.bind(on_release=self.dismiss)
         container.add_widget(close)
+        self.close_button = close
 
         self.add_widget(container)
 
@@ -817,6 +1113,7 @@ class Dialog(ModalView):
             )
         )
         self.rows.add_widget(label)
+        return label
 
     def add_picture(self, path, height):
         self.rows.add_widget(
@@ -891,6 +1188,171 @@ class Dialog(ModalView):
         self.rows.add_widget(row)
 
 
+class InspectionBar(Widget):
+    """The bar of the mini-game: a green zone and a slider that runs along it."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.zone_center = 0.5
+        self.zone = 0.2
+        self.position = 0.0
+        self.verdict = None  # None while playing, then True (hit) or False (miss)
+        self.bind(pos=self.redraw, size=self.redraw)
+
+    def redraw(self, *args):
+        x, y, w, h = self.x, self.y, self.width, self.height
+        self.canvas.clear()
+        with self.canvas:
+            Color(0.02, 0.05, 0.08, 0.95)
+            RoundedRectangle(pos=(x, y), size=(w, h), radius=[dp(12)])
+            if self.verdict is None:
+                Color(0.2, 0.75, 0.4, 0.9)
+            elif self.verdict:
+                Color(0.45, 1, 0.55, 1)
+            else:
+                Color(0.9, 0.3, 0.3, 1)
+            zone_w = w * self.zone
+            RoundedRectangle(
+                pos=(x + w * self.zone_center - zone_w / 2, y + dp(5)),
+                size=(zone_w, h - dp(10)),
+                radius=[dp(8)],
+            )
+            Color(1, 1, 1, 1)
+            RoundedRectangle(
+                pos=(x + w * self.position - dp(3.5), y + dp(1)),
+                size=(dp(7), h - dp(2)),
+                radius=[dp(3)],
+            )
+
+
+class InspectionDialog(Dialog):
+    """The inspection mini-game. Stop the slider in the green zone, HITS_TO_PASS times out of
+    ATTEMPTS. Guards make the zone wider. on_result(passed) is called once and returns the fine."""
+
+    def __init__(self, guards, fine, on_result, **kwargs):
+        super().__init__("ПРОВЕРКА!", dp(450), **kwargs)
+        self.auto_dismiss = False
+        self.guards = guards
+        self.fine = fine
+        self.on_result = on_result
+        self.attempt = 0
+        self.hits = 0
+        self.t = 0.0
+        self.period = rules.slider_period(0)
+        self.running = False
+        self.finished = False
+        self.step_event = None
+        self.close_button.disabled = True  # nobody leaves the inspector waiting
+        self.close_button.opacity = 0
+        self.close_button.text = "ОК"
+        self.bind(on_dismiss=self.cleanup)
+
+        self.add_text("Инспектор пришёл в казино!", GOLD, 28, 17)
+        self.add_text(
+            f"Останови бегунок в зелёной зоне. Нужно {rules.HITS_TO_PASS} попадания из {rules.ATTEMPTS}",
+            height=44,
+        )
+        if guards:
+            self.add_text(f"Охрана ({guards}): зона шире, штраф меньше", GOLD, 24, 13)
+        else:
+            self.add_text("Охраны нет: зона узкая, штраф большой", SOFT_RED, 24, 13)
+        self.add_text(f"Штраф при провале: {fmt(fine)}", SOFT_RED, 24, 15)
+        self.status = self.add_text("", GOLD, 26, 16)
+
+        self.bar = InspectionBar(size_hint_y=None, height=dp(56))
+        self.bar.zone = rules.zone_width(guards)
+        self.rows.add_widget(self.bar)
+
+        self.stop_button = CityButton(text="СТОП", btn_color=RED, size_hint_y=None, height=dp(64))
+        self.stop_button.font_size = dp(28)
+        self.stop_button.bind(on_press=self.press)
+        self.rows.add_widget(self.stop_button)
+        self.begin_attempt()
+
+    def begin_attempt(self, *args):
+        if self.finished:
+            return
+        self.t = 0.0
+        self.running = False
+        self.period = rules.slider_period(self.attempt)
+        self.bar.verdict = None
+        self.bar.position = 0.0
+        self.bar.center_zone = rules.random_zone_center(self.bar.zone)
+        self.bar.redraw()
+        self.status.text = f"Попытка {self.attempt + 1} из {rules.ATTEMPTS} · попаданий: {self.hits}"
+        self.stop_button.disabled = True
+        Clock.schedule_once(self.start_slider, 0.7)  # a short pause: look where the new zone is
+
+    def start_slider(self, *args):
+        if self.finished:
+            return
+        self.running = True
+        self.stop_button.disabled = False
+        if self.step_event is None:
+            self.step_event = Clock.schedule_interval(self.step, 1 / 60)
+
+    def step(self, dt):
+        if not self.running:
+            return
+        self.t += min(dt, 0.05)
+        self.bar.position = rules.slider_at(self.t, self.period)
+        self.bar.redraw()
+
+    def press(self, *args):
+        if not self.running or self.finished:
+            return
+        self.running = False
+        hit = rules.in_zone(self.bar.position, self.bar.center_zone, self.bar.zone)
+        self.bar.verdict = hit
+        self.bar.redraw()
+        self.hits += 1 if hit else 0
+        self.attempt += 1
+        self.stop_button.disabled = True
+        Sfx.play("chip" if hit else "click")
+        misses = self.attempt - self.hits
+        if self.hits >= rules.HITS_TO_PASS:
+            Clock.schedule_once(lambda dt: self.conclude(True), 0.8)
+        elif misses > rules.ATTEMPTS - rules.HITS_TO_PASS:
+            Clock.schedule_once(lambda dt: self.conclude(False), 0.8)
+        else:
+            Clock.schedule_once(self.begin_attempt, 0.8)
+
+    def conclude(self, passed):
+        if self.finished:
+            return
+        self.finished = True
+        self.stop_step()
+        fine = self.on_result(passed)
+        if passed:
+            self.status.color = GOLD
+            self.status.text = "ПРОВЕРКА ПРОЙДЕНА! Инспектор ушёл ни с чем"
+        else:
+            self.status.color = SOFT_RED
+            self.status.text = f"ПРОВАЛ! Штраф {fmt(fine)} фишек"
+        self.stop_button.disabled = True
+        self.stop_button.opacity = 0.3
+        self.close_button.disabled = False
+        self.close_button.opacity = 1
+
+    def give_up(self):
+        """The player left the screen in the middle of the inspection: that counts as a loss."""
+        if self.finished:
+            return
+        self.finished = True
+        self.stop_step()
+        self.on_result(False)
+        self.dismiss()
+
+    def stop_step(self):
+        self.running = False
+        if self.step_event is not None:
+            self.step_event.cancel()
+            self.step_event = None
+
+    def cleanup(self, *args):
+        self.stop_step()
+
+
 # ----- the screen -----
 
 
@@ -901,10 +1363,14 @@ class CityScreen(Screen):
         self.tick_event = None
         self.pop_event = None
         self.first_visit = True
+        self.inspect_event = None  # timer that sends the next inspector
+        self.inspector = None  # the inspector who is walking to the casino right now
+        self.inspection = None  # the open mini-game
 
         root = FloatLayout()
 
         self.map = MapView(self.on_plot, self.on_casino, size_hint=(1, 1))
+        self.map.world.on_inspector = self.on_inspector_arrived
         root.add_widget(self.map)
 
         # top panel: menu button, balance, city rank
@@ -978,6 +1444,16 @@ class CityScreen(Screen):
             zoom.bind(on_release=lambda *a, f=factor: self.zoom_map(f))
             root.add_widget(zoom)
 
+        # the guards button on the left, at the same height as the zoom buttons
+        guard = CityButton(
+            text="ОХРАНА", btn_color=BLUE, size_hint=(None, None), size=(dp(108), dp(48))
+        )
+        guard.font_size = dp(18)
+        guard.pos_hint = {"x": 0.03}
+        guard.y = dp(BOTTOM_PANEL) + dp(16)
+        guard.bind(on_release=self.open_guards)
+        root.add_widget(guard)
+
         self.add_widget(root)
 
     def zoom_map(self, factor):
@@ -1001,8 +1477,15 @@ class CityScreen(Screen):
             self.tick_event = Clock.schedule_interval(self.tick, 0.25)
         if self.pop_event is None:
             self.pop_event = Clock.schedule_interval(self.income_second, 1.0)
+        if self.inspect_event is None and self.inspector is None:
+            self.schedule_inspection(rules.next_inspection_gap() * 0.6)
 
     def on_leave(self, *args):
+        if self.inspection is not None:
+            self.inspection.give_up()  # running away from the inspector is a failed inspection
+        self.cancel_inspection_timer()
+        self.inspector = None
+        self.map.world.reset_inspectors()
         self.map.casino.stop_glow()
         self.map.world.stop_life()
         if self.tick_event is not None:
@@ -1026,6 +1509,7 @@ class CityScreen(Screen):
         for tile, plot in zip(self.map.plots, city["plots"]):
             tile.set_plot(plot)
         self.strip.refresh(city)
+        self.map.world.set_guards(city["guards"])
 
         text = f"{rules.rank_name(city)} · доход {fmt_rate(rules.income_per_second(city))}/сек"
         if city["landmarks"]:
@@ -1206,3 +1690,123 @@ class CityScreen(Screen):
             self.finish(f"{item['name']} построен! Доход города вырос", item["cost"], "win")
         elif result == "reserve":
             self.not_enough(item["cost"])
+
+    # --- inspections ---
+
+    def schedule_inspection(self, gap=None):
+        self.cancel_inspection_timer()
+        if gap is None:
+            gap = rules.next_inspection_gap()
+        self.inspect_event = Clock.schedule_once(self.send_inspector, gap)
+
+    def cancel_inspection_timer(self):
+        if self.inspect_event is not None:
+            self.inspect_event.cancel()
+            self.inspect_event = None
+
+    def send_inspector(self, *args):
+        self.inspect_event = None
+        if not rules.inspections_allowed(self.wallet.city):
+            self.schedule_inspection(rules.INSPECTION_MIN_GAP / 2)  # nothing built yet
+            return
+        person = self.map.world.spawn_inspector()
+        if person is None:
+            self.schedule_inspection(30)
+            return
+        self.inspector = person
+        if self.wallet.city["guards"] > 0:
+            Sfx.play("click")
+            self.say("Охрана заметила инспектора! Он идёт к казино", GOLD)
+            pulse(self.message_label)
+
+    def on_inspector_arrived(self, person):
+        """The inspector went through the door: the mini-game starts."""
+        if self.inspection is not None or self.manager is None or self.manager.current != self.name:
+            self.map.world.release_inspector(person)
+            return
+        Sfx.play("deal")
+        guards = self.wallet.city["guards"]
+        fine = rules.inspection_fine(self.wallet)
+        self.inspector = person
+        self.inspection = InspectionDialog(guards, fine, self.finish_inspection)
+        self.inspection.bind(on_dismiss=self.inspection_closed)
+        self.inspection.open()
+
+    def inspection_closed(self, *args):
+        self.inspection = None
+
+    def finish_inspection(self, passed):
+        fine = rules.finish_inspection(self.wallet, passed)
+        if passed:
+            Sfx.play("win")
+            self.say("Проверка пройдена! Инспектор ушёл ни с чем", GOLD)
+        else:
+            Sfx.play("lose")
+            float_text(self, f"-{fmt(fine)}", SOFT_RED, 0.5, 34)
+            self.say(f"Штраф {fmt(fine)} фишек за нарушения", SOFT_RED)
+        person, self.inspector = self.inspector, None
+        if person is not None:
+            self.map.world.release_inspector(person)
+        self.schedule_inspection()
+        self.refresh()
+        return fine
+
+    # --- guards ---
+
+    def open_guards(self, *args):
+        Sfx.play("click")
+        city = self.wallet.city
+        stats = city["inspections"]
+        guards = city["guards"]
+        dialog = Dialog("ОХРАНА КАЗИНО", dp(560))
+        dialog.add_text(
+            "Время от времени казино проверяют инспекторы. Охрана помогает пройти проверку",
+            height=44,
+            size=13,
+        )
+        dialog.add_text(
+            f"Каждый охранник: штраф -{int(rules.GUARD_FINE_CUT * 100)}% и зона в мини-игре шире",
+            GOLD,
+            height=24,
+            size=13,
+        )
+        dialog.add_text(
+            f"Проверок пройдено: {stats['passed']} · провалено: {stats['failed']}",
+            height=22,
+            size=13,
+        )
+        dialog.add_text(f"Заплачено штрафов: {fmt(stats['fines'])}", height=22, size=13)
+        for number in range(rules.MAX_GUARDS):
+            cost = rules.GUARD_COSTS[number]
+            owned = number < guards
+            is_next = number == guards
+            affordable = rules.can_afford(self.wallet.balance, cost)
+            if number == 0:
+                subtitle = "замечает инспекторов в толпе"
+            else:
+                subtitle = f"штраф -{int(rules.GUARD_FINE_CUT * 100 * (number + 1))}%, зона шире"
+            if owned:
+                color, action = GOLD_BUTTON, (lambda *a: None)
+            elif is_next:
+                color = GREEN if affordable else GRAY
+                action = lambda *a, d=dialog: self.do_guard(d)
+            else:
+                color, action = GRAY, (lambda *a: None)
+            dialog.add_row(
+                f"Охранник {number + 1}",
+                subtitle,
+                "НАНЯТ" if owned else fmt(cost),
+                color,
+                action,
+                chip=not owned,
+            )
+        dialog.open()
+
+    def do_guard(self, dialog):
+        dialog.dismiss()
+        cost = rules.guard_cost(self.wallet.city["guards"])
+        result = rules.hire_guard(self.wallet)
+        if result == "ok":
+            self.finish("Охранник нанят и встал у входа!", cost, "win")
+        elif result == "reserve":
+            self.not_enough(cost)

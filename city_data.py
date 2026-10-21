@@ -431,6 +431,8 @@ def new_city():
         "landmarks": [],
         "stored": 0.0,  # income already settled, waiting to be collected
         "last_collect": 0.0,  # moment from which income keeps piling up
+        "guards": 0,  # hired guards at the casino door
+        "inspections": {"passed": 0, "failed": 0, "fines": 0},
     }
 
 
@@ -469,6 +471,18 @@ def sanitize_city(raw):
             city[key] = max(0.0, float(raw.get(key, 0)))
         except (TypeError, ValueError):
             city[key] = 0.0
+
+    try:
+        city["guards"] = max(0, min(MAX_GUARDS, int(raw.get("guards", 0))))
+    except (TypeError, ValueError):
+        city["guards"] = 0
+    stats = raw.get("inspections")
+    if isinstance(stats, dict):
+        for key in city["inspections"]:
+            try:
+                city["inspections"][key] = max(0, int(stats.get(key, 0)))
+            except (TypeError, ValueError):
+                pass
     return city
 
 
@@ -605,3 +619,155 @@ def collect(wallet, now=None):
     else:
         wallet.save()
     return amount
+
+
+# ----- inspections (tax inspectors) and guards -----
+# Now and then an inspector walks to the casino door. A short mini-game decides what happens:
+# lose it and the casino pays a fine. Guards make the mini-game easier and the fine smaller,
+# and a guard also spots inspectors in the crowd.
+
+MAX_GUARDS = 3
+GUARD_COSTS = [5000, 20000, 60000]  # price of the 1st, 2nd and 3rd guard
+GUARD_FINE_CUT = 0.15  # every guard lowers the fine by this share
+GUARD_ZONE_BONUS = 0.07  # every guard makes the green zone this much wider (of the bar)
+ZONE_BASE = 0.16  # width of the green zone without guards (1.0 = the whole bar)
+ZONE_MAX = 0.5
+ATTEMPTS = 3  # tries in the mini-game
+HITS_TO_PASS = 2
+SLIDER_PERIOD = 1.5  # seconds for the slider to go there and back, first try
+SLIDER_SPEEDUP = 0.82  # every next try the period is multiplied by this
+
+INSPECTION_MIN_GAP = 100  # seconds between two inspections (random in this range)
+INSPECTION_MAX_GAP = 200
+FINE_SHARE = 0.08  # the fine is this share of the balance...
+FINE_MIN = 300  # ...but not less than this
+
+
+def inspections_allowed(city):
+    """The first minutes are free of inspectors: they come only to a city that has something."""
+    return score(city) > 0
+
+
+def next_inspection_gap(rng=random):
+    return rng.uniform(INSPECTION_MIN_GAP, INSPECTION_MAX_GAP)
+
+
+def guard_cost(guards):
+    """Price of the next guard, or None when all places are taken."""
+    return GUARD_COSTS[guards] if 0 <= guards < MAX_GUARDS else None
+
+
+def zone_width(guards):
+    return min(ZONE_MAX, ZONE_BASE + GUARD_ZONE_BONUS * max(0, guards))
+
+
+def slider_period(attempt):
+    """Seconds for one trip there and back; attempt counts from 0."""
+    return SLIDER_PERIOD * SLIDER_SPEEDUP**attempt
+
+
+def slider_at(t, period):
+    """Position 0..1 of the slider after t seconds: it runs 0 -> 1 -> 0 -> 1 ... smoothly."""
+    phase = (t / period) % 1.0
+    return 1 - abs(2 * phase - 1)
+
+
+def in_zone(position, center, width):
+    return abs(position - center) <= width / 2
+
+
+def random_zone_center(width, rng=random):
+    margin = width / 2 + 0.05
+    return rng.uniform(margin, 1 - margin)
+
+
+def inspection_fine(wallet):
+    """How many chips this inspection costs right now."""
+    guards = wallet.city["guards"]
+    base = max(FINE_MIN, int(wallet.balance * FINE_SHARE))
+    fine = int(base * (1 - GUARD_FINE_CUT * guards))
+    return max(0, min(fine, wallet.balance // 2))  # never takes more than half of the chips
+
+
+def hire_guard(wallet):
+    city = wallet.city
+    cost = guard_cost(city["guards"])
+    if cost is None:
+        return "max"
+    if not can_afford(wallet.balance, cost):
+        return "reserve"
+    city["guards"] += 1
+    wallet.take(cost)  # saves the wallet together with the city
+    return "ok"
+
+
+def finish_inspection(wallet, passed):
+    """Writes the result down. Returns the fine (0 if the casino passed)."""
+    stats = wallet.city["inspections"]
+    if passed:
+        stats["passed"] += 1
+        wallet.save()
+        return 0
+    fine = inspection_fine(wallet)
+    stats["failed"] += 1
+    stats["fines"] += fine
+    wallet.take(fine)
+    return fine
+
+
+# ----- people on the pavements -----
+# Everybody walks on the pavements of the two avenues, outside the plaza of the casino.
+# Those who "visit" the casino go along one of the ARRIVAL routes to the red carpet in front
+# of the door and disappear inside. Inspectors use the very same routes, so they look like
+# everybody else. All points are in dp, (0, 0) is the middle of the map.
+
+SIDEWALK = ROAD_WIDTH / 2 + PAVE / 2  # distance from the middle of an avenue to its pavement
+DOOR = (0, -CASINO_H / 2 - 3)  # the foot of the building on the red carpet: people vanish here
+WALK_END = RING_HALF - 40  # people appear / turn around this far from the middle
+
+_NEAR = 121.5  # = 105 + SIDEWALK, the pavement in front of the casino
+
+ARRIVAL_ROUTES = [
+    [(-WALK_END, -_NEAR), (-30, -_NEAR), DOOR],
+    [(WALK_END, -_NEAR), (30, -_NEAR), DOOR],
+    [(ROAD_X[1] - SIDEWALK, -WALK_END), (ROAD_X[1] - SIDEWALK, -_NEAR), DOOR],
+    [(ROAD_X[0] + SIDEWALK, -WALK_END), (ROAD_X[0] + SIDEWALK, -_NEAR), DOOR],
+]
+
+
+def _strolls():
+    """Straight pavement pieces where people walk back and forth (each is two points)."""
+    out = []
+    for x in ROAD_X:
+        for side in (-SIDEWALK, SIDEWALK):
+            for lo, hi in ((-WALK_END, -128), (128, WALK_END)):
+                out.append(((x + side, lo), (x + side, hi)))
+    for y in ROAD_Y:
+        for side in (-SIDEWALK, SIDEWALK):
+            for lo, hi in ((-WALK_END, -150), (150, WALK_END)):
+                out.append(((lo, y + side), (hi, y + side)))
+    # the pavement right in front of the casino is the busiest one: it is in ARRIVAL_ROUTES
+    return out
+
+
+STROLL_PATHS = _strolls()
+
+
+def route_length(points):
+    return sum(math.hypot(points[i + 1][0] - points[i][0], points[i + 1][1] - points[i][1])
+               for i in range(len(points) - 1))
+
+
+def point_on_route(points, distance):
+    """(x, y) after walking `distance` along an open polyline (clamped to its ends)."""
+    if distance <= 0:
+        return points[0]
+    for i in range(len(points) - 1):
+        ax, ay = points[i]
+        bx, by = points[i + 1]
+        seg = math.hypot(bx - ax, by - ay)
+        if distance <= seg and seg > 0:
+            t = distance / seg
+            return (ax + (bx - ax) * t, ay + (by - ay) * t)
+        distance -= seg
+    return points[-1]
