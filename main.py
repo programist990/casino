@@ -19,7 +19,7 @@ from kivy.utils import platform
 
 import city_data as city_rules
 from blackjack import BlackjackScreen
-from city import CityScreen
+from city import CityScreen, InspectionService
 from crash import CrashScreen
 from common import (
     BLUE,
@@ -1140,14 +1140,21 @@ class CasinoApp(App):
         manager.add_widget(BlackjackScreen(wallet, name="blackjack"))
         manager.add_widget(RouletteScreen(wallet, name="roulette"))
         manager.add_widget(CrashScreen(wallet, name="crash"))
-        manager.add_widget(CityScreen(wallet, name="city"))
+        city_screen = CityScreen(wallet, name="city")
+        manager.add_widget(city_screen)
         manager.add_widget(StatsScreen(wallet, name="stats"))
         self.manager = manager
+        # inspectors come on a timer on every screen, not only on the city map
+        self.inspections = InspectionService(wallet, manager)
+        city_screen.service = self.inspections
+        self.inspections.start()
         Window.bind(on_keyboard=self.on_key)
         return manager
 
     def on_key(self, window, key, *args):
         """Android back button: go to the menu first, exit only from the menu."""
+        if key == 27 and self.inspections.active():
+            return True  # nobody walks away from the inspector
         if key == 27 and self.manager.current != "menu":
             go_to(self.manager, "menu", "right")
             return True

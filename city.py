@@ -1277,7 +1277,7 @@ class InspectionDialog(Dialog):
         self.period = rules.slider_period(self.attempt)
         self.bar.verdict = None
         self.bar.position = 0.0
-        self.bar.center_zone = rules.random_zone_center(self.bar.zone)
+        self.bar.zone_center = rules.random_zone_center(self.bar.zone)
         self.bar.redraw()
         self.status.text = f"Попытка {self.attempt + 1} из {rules.ATTEMPTS} · попаданий: {self.hits}"
         self.stop_button.disabled = True
@@ -1302,7 +1302,7 @@ class InspectionDialog(Dialog):
         if not self.running or self.finished:
             return
         self.running = False
-        hit = rules.in_zone(self.bar.position, self.bar.center_zone, self.bar.zone)
+        hit = rules.in_zone(self.bar.position, self.bar.zone_center, self.bar.zone)
         self.bar.verdict = hit
         self.bar.redraw()
         self.hits += 1 if hit else 0
@@ -1363,7 +1363,7 @@ class CityScreen(Screen):
         self.tick_event = None
         self.pop_event = None
         self.first_visit = True
-        self.inspect_event = None  # timer that sends the next inspector
+        self.service = None  # InspectionService: owns the timer, set by the app
         self.inspector = None  # the inspector who is walking to the casino right now
         self.inspection = None  # the open mini-game
 
@@ -1477,15 +1477,15 @@ class CityScreen(Screen):
             self.tick_event = Clock.schedule_interval(self.tick, 0.25)
         if self.pop_event is None:
             self.pop_event = Clock.schedule_interval(self.income_second, 1.0)
-        if self.inspect_event is None and self.inspector is None:
-            self.schedule_inspection(rules.next_inspection_gap() * 0.6)
 
     def on_leave(self, *args):
         if self.inspection is not None:
             self.inspection.give_up()  # running away from the inspector is a failed inspection
-        self.cancel_inspection_timer()
+        walking = self.inspector is not None
         self.inspector = None
         self.map.world.reset_inspectors()
+        if walking and self.service is not None:
+            self.service.schedule(15)  # the walking inspector is gone: the next one comes soon
         self.map.casino.stop_glow()
         self.map.world.stop_life()
         if self.tick_event is not None:
@@ -1692,32 +1692,20 @@ class CityScreen(Screen):
             self.not_enough(item["cost"])
 
     # --- inspections ---
+    # The timer lives in InspectionService (it works on every screen). On the city map the
+    # inspector is shown walking to the casino door; in the games he simply comes in.
 
-    def schedule_inspection(self, gap=None):
-        self.cancel_inspection_timer()
-        if gap is None:
-            gap = rules.next_inspection_gap()
-        self.inspect_event = Clock.schedule_once(self.send_inspector, gap)
-
-    def cancel_inspection_timer(self):
-        if self.inspect_event is not None:
-            self.inspect_event.cancel()
-            self.inspect_event = None
-
-    def send_inspector(self, *args):
-        self.inspect_event = None
-        if not rules.inspections_allowed(self.wallet.city):
-            self.schedule_inspection(rules.INSPECTION_MIN_GAP / 2)  # nothing built yet
-            return
+    def send_inspector(self):
+        """Sends a walking inspector. Returns False if both are busy."""
         person = self.map.world.spawn_inspector()
         if person is None:
-            self.schedule_inspection(30)
-            return
+            return False
         self.inspector = person
         if self.wallet.city["guards"] > 0:
             Sfx.play("click")
             self.say("Охрана заметила инспектора! Он идёт к казино", GOLD)
             pulse(self.message_label)
+        return True
 
     def on_inspector_arrived(self, person):
         """The inspector went through the door: the mini-game starts."""
@@ -1731,9 +1719,13 @@ class CityScreen(Screen):
         self.inspection = InspectionDialog(guards, fine, self.finish_inspection)
         self.inspection.bind(on_dismiss=self.inspection_closed)
         self.inspection.open()
+        if self.service is not None:
+            self.service.dialog = self.inspection
 
     def inspection_closed(self, *args):
         self.inspection = None
+        if self.service is not None:
+            self.service.dialog = None
 
     def finish_inspection(self, passed):
         fine = rules.finish_inspection(self.wallet, passed)
@@ -1747,7 +1739,8 @@ class CityScreen(Screen):
         person, self.inspector = self.inspector, None
         if person is not None:
             self.map.world.release_inspector(person)
-        self.schedule_inspection()
+        if self.service is not None:
+            self.service.schedule()
         self.refresh()
         return fine
 
@@ -1810,3 +1803,97 @@ class CityScreen(Screen):
             self.finish("Охранник нанят и встал у входа!", cost, "win")
         elif result == "reserve":
             self.not_enough(cost)
+
+
+# ----- inspections everywhere -----
+
+GAME_SCREENS = ("slots", "blackjack", "roulette", "crash")
+
+
+class InspectionService:
+    """Sends inspectors on a timer, whatever screen the player is on.
+
+    * city map: the inspector walks to the casino door (CityScreen does that);
+    * a game: the inspector comes in as soon as the round is over (never in the middle of
+      a spin, a hand or a flight), and the same mini-game opens over the table;
+    * menu / statistics: nobody comes, the timer just waits.
+    """
+
+    RETRY_BUSY = 3  # seconds: a round is going on, ask again a bit later
+    RETRY_IDLE = 5  # seconds: the player is in the menu
+
+    def __init__(self, wallet, manager):
+        self.wallet = wallet
+        self.manager = manager
+        self.event = None
+        self.dialog = None  # the open mini-game, if any
+
+    def active(self):
+        """True while an inspector is being dealt with (the back button must not skip it)."""
+        return self.dialog is not None
+
+    def start(self):
+        self.schedule()
+
+    def stop(self):
+        if self.event is not None:
+            self.event.cancel()
+            self.event = None
+
+    def schedule(self, gap=None):
+        self.stop()
+        if gap is None:
+            gap = rules.next_inspection_gap()
+        self.event = Clock.schedule_once(self.fire, gap)
+
+    def fire(self, *args):
+        self.event = None
+        if self.dialog is not None:
+            return  # one is already here; finishing it schedules the next
+        if not rules.inspections_allowed(self.wallet.city):
+            self.schedule(rules.INSPECTION_MIN_GAP / 2)  # nothing built yet
+            return
+        name = self.manager.current
+        screen = self.manager.get_screen(name)
+        if name == "city":
+            if screen.inspection is not None:
+                return
+            if not screen.send_inspector():
+                self.schedule(30)  # both inspectors are busy
+            return  # the city screen calls schedule() when the check is over
+        if name in GAME_SCREENS:
+            if self.round_going(screen):
+                self.schedule(self.RETRY_BUSY)
+            else:
+                self.open_in_game(screen)
+            return
+        self.schedule(self.RETRY_IDLE)
+
+    @staticmethod
+    def round_going(screen):
+        """Is something happening on the table right now? Every game has its own flag."""
+        return any(
+            getattr(screen, flag, False) for flag in ("spinning", "flying", "in_round", "busy")
+        )
+
+    def open_in_game(self, screen):
+        if getattr(screen, "autospin", False):
+            screen.toggle_autospin()  # slots: the auto mode stops while the inspector is here
+        Sfx.play("deal")
+        guards = self.wallet.city["guards"]
+        fine = rules.inspection_fine(self.wallet)
+        self.dialog = InspectionDialog(guards, fine, lambda passed: self.finish_in_game(screen, passed))
+        self.dialog.bind(on_dismiss=self.dialog_closed)
+        self.dialog.open()
+
+    def dialog_closed(self, *args):
+        self.dialog = None
+
+    def finish_in_game(self, screen, passed):
+        fine = rules.finish_inspection(self.wallet, passed)
+        Sfx.play("win" if passed else "lose")
+        top_bar = getattr(screen, "top_bar", None)
+        if top_bar is not None:
+            top_bar.set_balance(self.wallet.balance)
+        self.schedule()
+        return fine
